@@ -1,0 +1,199 @@
+/* Thèmes globaux */
+body.light-mode {
+  background-color: #f5f7fa;
+  color: #222;
+  font-family: 'Poppins', sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+body.dark-mode {
+  background-color: #121212;
+  color: #f0f0f0;
+  font-family: 'Poppins', sans-serif;
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: bold;
+  color: #4caf50;
+  margin-bottom: 1rem;
+}
+.back-button svg {
+  margin-right: 8px;
+}
+
+
+/* Conteneur principal */
+.home-container {
+  padding: 2rem;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.top-bar {
+  position: absolute;
+  top: 15px;
+  left: 20px;
+  z-index: 999;
+}
+
+.admin-access-btn {
+  background-color: #1d3557;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.admin-access-btn:hover {
+  background-color: #0d1e30;
+}
+
+
+/* Contenu principal */
+.main-content {
+  max-width: 900px;
+  width: 100%;
+  padding: 2.5rem;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+  text-align: center;
+}
+
+body.dark-mode .main-content {
+  background-color: rgba(40, 40, 40, 0.9);
+}
+
+/* Section de connexion */
+.login-section {
+  padding: 2rem;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background-color: #fff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+body.dark-mode .login-section {
+  background-color: rgba(50, 50, 50, 0.9);
+}
+
+.login-section p {
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+  color: #555;
+}
+
+.login-btn {
+  padding: 1rem 2rem;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 30px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  width: 100%;
+  max-width: 250px;
+  margin-top: 20px;
+}
+
+.login-btn:hover {
+  background-color: #43a047;
+  transform: scale(1.05);
+}
+
+.login-btn:focus {
+  outline: none;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.6);
+}
+
+/* Section de bienvenue */
+.welcome-section {
+  text-align: center;
+}
+
+.welcome-section p {
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+  color: #444;
+}
+
+
+
+.logout-btn {
+  padding: 1rem 2rem;
+  background-color: #aa0000;
+  color: white;
+  border: none;
+  border-radius: 30px;
+  cursor: pointer;
+  font-size: 1rem;
+  margin-top: 20px;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  width: 100%;
+  max-width: 250px;
+}
+
+.logout-btn:hover {
+  background-color: #8a0000;
+  transform: scale(1.05);
+}
+
+.logout-btn:focus {
+  outline: none;
+  box-shadow: 0 0 10px rgba(170, 0, 0, 0.6);
+}
+
+/* Animation de transition pour les sections */
+.main-content, .login-section, .welcome-section {
+  opacity: 0;
+  animation: fadeIn 0.5s forwards;
+}
+
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Toggle du mode */
+.theme-toggle {
+  position: fixed; /* Fixer le toggle */
+  top: 20px;       /* Espacement du haut de la page */
+  right: 20px;     /* Espacement du côté droit de la page */
+  z-index: 100;    /* Assurer que le toggle reste au-dessus des autres éléments */
+  font-size: 0.95rem;
+  background-color: rgba(255, 255, 255, 0.7); /* Fond semi-transparent */
+  padding: 10px;
+  border-radius: 10px;
+}
+
+/* Pour les modes */
+body.light-mode .theme-toggle {
+  color: #222;
+}
+
+body.dark-mode .theme-toggle {
+  color: #f0f0f0;
+}
+
+.esp-admin {
+  width: 100%;
+  padding: 1rem;
+  background-color: #4caf50;
+  color: white;
+  font-size: 0.7rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}

@@ -1,0 +1,33 @@
+.form-ajout {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+  }
+  
+  .form-ajout label {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-weight: bold;
+  }
+  
+  .form-ajout input,
+  .form-ajout textarea {
+    width: 100%;
+    padding: 0.8rem;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    font-size: 1rem;
+  }
+  
+  body.dark-mode .form-ajout input,
+  body.dark-mode .form-ajout textarea {
+    background-color: #1e1e1e;
+    color: white;
+    border: 1px solid #444;
+  }
+  
+  .form-ajout button {
+    width: fit-content;
+    padding: 0.7rem 1.4rem;
+  }
+  

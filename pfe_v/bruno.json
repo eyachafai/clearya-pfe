@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "pfe_v",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

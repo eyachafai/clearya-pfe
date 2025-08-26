@@ -1,0 +1,47 @@
+/* App.css */
+body {
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
+  background-color: #f2f2f2;
+}
+
+.app-container {
+  display: flex;
+  height: 100vh;
+  background-color: #e0e0e0;
+}
+
+/* Exemple de styles inspirés de WhatsApp */
+.sidebar {
+  width: 280px;
+  background-color: #d1d1d1;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar h2 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  color: #444;
+}
+
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+}
+
+.sidebar li {
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  background-color: #bbb;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.main-content {
+  flex: 1;
+  padding: 2rem;
+  background-color: #ffffff;
+  overflow-y: auto;
+}
