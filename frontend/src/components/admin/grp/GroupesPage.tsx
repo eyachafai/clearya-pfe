@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { FaSyncAlt, FaUsers } from "react-icons/fa";
+import { FaSyncAlt, FaUsers, FaTimesCircle } from "react-icons/fa";
 import './GroupesPage.css';
 import ChatPage from '../../chat/ChatPage';
 import { Group } from '../../../types/groupe';
@@ -17,7 +17,13 @@ const GroupesPage = () => {
 
   useEffect(() => {
     fetchGroups();
-  }, []);
+
+      // Met à jour la clé du chat à chaque changement d'id (toujours en dehors du render)
+      if (openChatGroupeId) {
+      chatKeyRef.current = Date.now();
+    }
+
+  }, [openChatGroupeId]);
 
   const fetchGroups = async () => {
     setLoading(true);
@@ -43,12 +49,6 @@ const GroupesPage = () => {
     }
   };
 
-  // Met à jour la clé du chat à chaque changement d'id (toujours en dehors du render)
-  useEffect(() => {
-    if (openChatGroupeId) {
-      chatKeyRef.current = Date.now();
-    }
-  }, [openChatGroupeId]);
 
   if (openChatGroupeId) {
     console.log("=== DEBUG OUVERTURE CHAT ===");
@@ -65,24 +65,70 @@ const GroupesPage = () => {
     // Correction : la clé du composant ChatPage doit changer à chaque changement de groupe pour forcer le reset
     // On utilise simplement l'id du groupe comme clé (inutile d'ajouter le timestamp)
     return (
-      <div style={{ padding: 32 }}>
+      <div
+        style={{
+          minHeight: "100vh",
+          width: "100vw",
+          position: "fixed",
+          top: 0,
+          left: 0,
+          zIndex: 1000,
+          background: "linear-gradient(135deg,#e3f2fd 0%,#f8fafc 100%)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+        }}
+      >
         <button
           style={{
-            marginBottom: 24,
-            background: "#ff9800",
-            color: "#fff",
+            background: "none",
+            color: "#00c853",
             border: "none",
-            borderRadius: 8,
-            padding: "0.7rem 1.4rem",
+            borderRadius: "50%",
+            padding: 0,
             cursor: "pointer",
-            fontWeight: 600
+            fontWeight: 600,
+            position: "absolute",
+            top: 32,
+            left: 32,
+            zIndex: 1100,
+            fontSize: 44,
+            boxShadow: "0 2px 12px #00c85322",
+            transition: "background 0.2s, box-shadow 0.2s",
+            outline: "none"
           }}
           onClick={() => setOpenChatGroupeId(null)}
+          title="Fermer le chat"
+          onMouseOver={e => (e.currentTarget.style.background = "#e8f5e9")}
+          onMouseOut={e => (e.currentTarget.style.background = "none")}
         >
-          Fermer le chat
+          <FaTimesCircle />
         </button>
-        {/* Passe groupeName en prop */}
-        <ChatPage key={groupeIdNumber} groupeIdProp={groupeIdNumber} groupeNameProp={groupeName} />
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 1200,
+            margin: "0 auto",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            height: "100vh",
+            boxShadow: "0 8px 32px #bdbdbd30",
+            borderRadius: 32,
+            background: "rgba(255,255,255,0.95)",
+            padding: "2.5rem 1.5rem",
+            position: "relative"
+          }}
+        >
+          {/* Passe groupeName en prop */}
+          <ChatPage
+            key={groupeIdNumber}
+            groupeIdProp={groupeIdNumber}
+            groupeNameProp={groupeName}
+          />
+        </div>
       </div>
     );
   }
