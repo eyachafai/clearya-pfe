@@ -6,3 +6,7 @@ export type Utilisateur = {
   first_name?: string;
   last_name?: string;
 };
+
+export type UtilisateurWithRole = Utilisateur & {
+  role: string;
+};

@@ -40,17 +40,12 @@ const io = new Server(server, {
   }
 });
 
+// Connecte socket.io à la route messages
+messagesRoutes.setSocketIo(io);
+
 // Gestion des événements Socket.IO
 io.on("connection", (socket) => {
   console.log("Un utilisateur connecté :", socket.id);
-
-  // Écouter un message venant du client
-  socket.on("sendMessage", (data) => {
-    console.log("Message reçu:", data);
-
-    // Réémettre à tous les clients connectés
-    io.emit("receiveMessage", data);
-  });
 
   socket.on("disconnect", () => {
     console.log("Utilisateur déconnecté :", socket.id);
@@ -79,18 +74,6 @@ app.get('/', (req, res) => {
   res.send('✅ Backend Clearya is running');
 });
 
-// ➤ Fonction de test DB
-/*async function testDbConnection() {
-  try {
-    await pool.query('SELECT 1');
-    console.log('✅ PostgreSQL connecté');
-  } catch (err) {
-    console.error('❌ Erreur DB:', err);
-    process.exit(1);
-  }
-}*/
-
-//testDbConnection();  // ✅ N'oublie de l'appeler pour tester la DB au démarrage
 
 // ➤ Route test protégée Keycloak (exemple)
 app.get('/api/admin/test', keycloak.protect('realm:admin'), (req, res) => {

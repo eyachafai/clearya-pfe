@@ -1,14 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
-type Groupe = {
-  id: number;
-  name: string;
-};
-
-type Props = {
-  utilisateur_id: number;
-};
+import { Groupe, Props } from '../../types/grp_slide';
 
 const GroupesSidebar = ({ utilisateur_id }: Props) => {
   const [groupes, setGroupes] = useState<Groupe[]>([]);

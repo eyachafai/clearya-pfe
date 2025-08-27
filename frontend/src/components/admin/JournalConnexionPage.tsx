@@ -1,12 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FaSyncAlt } from "react-icons/fa";
-
-type JournalEntry = {
-  id: string;
-  timestamp: number;
-  type: string;
-  username?: string;
-};
+import { JournalEntry } from '../.././types/journal_cnx';
 
 const JournalConnexionPage = () => {
   const [logs, setLogs] = useState<JournalEntry[]>([]);

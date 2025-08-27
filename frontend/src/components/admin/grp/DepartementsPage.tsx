@@ -1,26 +1,8 @@
 import { useEffect, useState } from 'react';
 import apiClient from '../../../services/apiClient';
 import { FaBuilding, FaSyncAlt, FaUsers } from "react-icons/fa";
+import { Departement,UserInDep,Role } from '../../../types/departement';
 
-export type Departement = {
-  id: number;
-  keycloak_id: string;
-  name: string;
-  description?: string | null;
-  parent_id?: number | null;
-};
-
-type UserInDep = {
-  id: number;
-  username: string;
-  email: string;
-  role: string;
-};
-
-type Role = {
-  name: string;
-  description?: string;
-};
 
 const DepartementsPage = () => {
   const [departements, setDepartements] = useState<Departement[]>([]);

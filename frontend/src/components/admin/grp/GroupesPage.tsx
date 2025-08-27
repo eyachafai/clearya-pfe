@@ -2,24 +2,15 @@ import { useEffect, useState, useRef } from "react";
 import { FaSyncAlt, FaUsers } from "react-icons/fa";
 import './GroupesPage.css';
 import ChatPage from '../../chat/ChatPage';
-
-type Member = {
-  id: string;
-  username: string;
-  email: string;
-  role: string;
-};
-
-type Group = {
-  id: string;
-  name: string;
-  membres: Member[];
-};
+import { Group } from '../../../types/groupe';
+import { useKeycloak } from "@react-keycloak/web";
 
 const GroupesPage = () => {
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(false);
   const [openChatGroupeId, setOpenChatGroupeId] = useState<string | null>(null);
+
+  const { keycloak } = useKeycloak();
 
   // Utilise un ref pour stocker la clé du chat (pas de useState dans le bloc conditionnel !)
   const chatKeyRef = useRef<number>(Date.now());
@@ -158,53 +149,62 @@ const GroupesPage = () => {
             </tr>
           </thead>
           <tbody>
-            {groups.map((group) => (
-              <tr key={group.id} style={{ borderBottom: "1px solid #ffe0b2", transition: "background 0.2s" }}>
-                <td style={{ padding: "0.9rem" }}>{group.name}</td>
-                <td style={{ padding: "0.9rem" }}>
-                  {group.membres.length === 0 ? (
-                    <span style={{ color: "#888" }}>Aucun membre</span>
-                  ) : (
-                    <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-                      {group.membres.map(m => (
-                        <li key={m.id} style={{ marginBottom: 4 }}>
-                          <span style={{ fontWeight: 600 }}>{m.username}</span>
-                          <span style={{ color: "#888", marginLeft: 8 }}>{m.email}</span>
-                          <span style={{
-                            background: "#fff",
-                            color: "#232323",
-                            borderRadius: 10,
-                            padding: "1px 7px",
-                            marginLeft: 12,
-                            fontSize: "0.82em",
-                            fontWeight: 500,
-                            border: "1px solid #232323"
-                          }}>
-                            {m.role}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </td>
-                <td style={{ padding: "0.9rem" }}>
-                  <button
-                    style={{
-                      background: "#ff9800",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 8,
-                      padding: "0.5rem 1.2rem",
-                      cursor: "pointer",
-                      fontWeight: 600
-                    }}
-                    onClick={() => setOpenChatGroupeId(String(group.id))}
-                  >
-                    Ouvrir Chat
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {groups.map((group) => {
+              // Vérifie si l'utilisateur courant (admin) est membre du groupe
+              const adminUsername = keycloak?.tokenParsed?.preferred_username;
+              const isAdminInGroup = group.membres.some(
+                (m: any) => m.username === adminUsername
+              );
+              return (
+                <tr key={group.id} style={{ borderBottom: "1px solid #ffe0b2", transition: "background 0.2s" }}>
+                  <td style={{ padding: "0.9rem" }}>{group.name}</td>
+                  <td style={{ padding: "0.9rem" }}>
+                    {group.membres.length === 0 ? (
+                      <span style={{ color: "#888" }}>Aucun membre</span>
+                    ) : (
+                      <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
+                        {group.membres.map(m => (
+                          <li key={m.id} style={{ marginBottom: 4 }}>
+                            <span style={{ fontWeight: 600 }}>{m.username}</span>
+                            <span style={{ color: "#888", marginLeft: 8 }}>{m.email}</span>
+                            <span style={{
+                              background: "#fff",
+                              color: "#232323",
+                              borderRadius: 10,
+                              padding: "1px 7px",
+                              marginLeft: 12,
+                              fontSize: "0.82em",
+                              fontWeight: 500,
+                              border: "1px solid #232323"
+                            }}>
+                              {m.role}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </td>
+                  <td style={{ padding: "0.9rem" }}>
+                    {isAdminInGroup && (
+                      <button
+                        style={{
+                          background: "#ff9800",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: 8,
+                          padding: "0.5rem 1.2rem",
+                          cursor: "pointer",
+                          fontWeight: 600
+                        }}
+                        onClick={() => setOpenChatGroupeId(String(group.id))}
+                      >
+                        Ouvrir Chat
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

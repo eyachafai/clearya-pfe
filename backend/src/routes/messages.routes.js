@@ -100,66 +100,59 @@ router.get('/conversations/:conversation_id/messages', async (req, res) => {
   }
 });
 
-// Pour tester les routes de messagerie :
+// Pour permettre à l'API d'émettre sur socket.io, il faut exporter une fonction d'initialisation
+let ioInstance = null;
+function setSocketIo(io) {
+  ioInstance = io;
+}
+router.setSocketIo = setSocketIo; // <-- Corrige ici : attache à router, pas à module.exports
 
-// 1. **Créer une conversation pour un groupe**
-//    - Méthode : POST
-//    - URL : `http://localhost:5000/api/messages/conversations`
-//    - Body (JSON) :
-//      ```json
-//      {
-//        "groupe_id": 1,
-//        "titre": "Groupe 1"
-//      }
-//      ```
-//    - Résultat attendu : un objet conversation (id, groupe_id, titre).
+// Nouvelle route API pour envoyer un message en temps réel (front → API → axios → backend socket → API → front)
+router.post('/messages/realtime', async (req, res) => {
+  try {
+    // Utilise axios pour appeler la vraie route backend locale
+    const axios = require('axios');
+    const apiUrl = `http://localhost:${process.env.PORT || 5000}/api/messages/messages`;
+    const rep = await axios.post(apiUrl, req.body, { headers: { 'Content-Type': 'application/json' } });
+    const msg = rep.data;
 
-// 2. **Envoyer un message dans une conversation**
-//    - Méthode : POST
-//    - URL : `http://localhost:5000/api/messages/messages`
-//    - Body (JSON) :
-//      ```json
-//      {
-//        "conversation_id": 1,
-//        "utilisateur_id": 1,
-//        "contenu": "Bonjour à tous !",
-//        "type": "text"
-//      }
-//      ```
-//    - Résultat attendu : un objet message (id, conversation_id, utilisateur_id, contenu, ...).
+    // Émet le message sur socket.io à tous les clients connectés
+    if (ioInstance) {
+      ioInstance.emit("receiveMessage", msg);
+    }
 
-// 3. **Récupérer l’historique des messages d’une conversation**
-//    - Méthode : GET
-//    - URL : `http://localhost:5000/api/messages/conversations/1/messages`
-//    - Résultat attendu : un tableau de messages (avec utilisateur inclus).
+    // Retourne la réponse telle quelle au frontend
+    res.status(201).json(msg);
+  } catch (err) {
+    console.error("Erreur /messages/realtime:", err);
+    res.status(500).json({ error: "Erreur envoi message temps réel", details: err.message });
+  }
+});
 
-// **Utilise Postman, Insomnia ou curl pour tester ces routes.**
+// Proxy pour créer ou récupérer une conversation (front → API → axios → backend → API → front)
+router.post('/conversations/proxy', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const apiUrl = `http://localhost:${process.env.PORT || 5000}/api/messages/conversations`;
+    const rep = await axios.post(apiUrl, req.body, { headers: { 'Content-Type': 'application/json' } });
+    res.status(rep.status).json(rep.data);
+  } catch (err) {
+    console.error("Erreur /conversations/proxy:", err);
+    res.status(500).json({ error: "Erreur proxy conversation", details: err.message });
+  }
+});
 
-// **Exemple curl :**
-// ```bash
-// curl -X POST http://localhost:5000/api/messages/conversations -H "Content-Type: application/json" -d '{"groupe_id":1,"titre":"Groupe 1"}'
-// curl -X POST http://localhost:5000/api/messages/messages -H "Content-Type: application/json" -d '{"conversation_id":1,"utilisateur_id":1,"contenu":"Bonjour !","type":"text"}'
-// curl http://localhost:5000/api/messages/conversations/1/messages
-// ```
-
-// **Vérifie la base de données pour voir les enregistrements créés.**
-
-// Remarque :
-// - Chaque conversation est liée à un groupe (groupe_id).
-// - Les membres d'une conversation sont les membres du groupe correspondant (table groupe_utilisateur).
-// - L'admin peut aussi être inclus comme membre spécial si besoin (à gérer côté logique d'affichage ou d'envoi).
-/*
-# Explication technique
-
-- On utilise `groupe_id` (clé primaire numérique) pour référencer les groupes dans la base de données et dans les relations (ex : conversation, groupe_utilisateur).
-- Le champ `name` est juste un label (nom affiché), il n’est pas unique ni optimisé pour les relations SQL.
-- Les clés étrangères (`groupe_id`) permettent de garantir l’intégrité référentielle, d’éviter les doublons, et de faire des jointures rapides.
-- Si tu utilises le `name`, tu risques d’avoir des bugs si deux groupes ont le même nom ou si le nom change.
-
-**En résumé :**
-- `groupe_id` = identifiant technique, utilisé pour toutes les relations et requêtes.
-- `name` = affichage, utilisé pour l’UI et la présentation.
-
-**C’est la bonne pratique en base de données relationnelle.***/
+// Proxy pour récupérer les messages d'une conversation (front → API → axios → backend → API → front)
+router.get('/conversations/:conversation_id/messages/proxy', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const apiUrl = `http://localhost:${process.env.PORT || 5000}/api/messages/conversations/${req.params.conversation_id}/messages`;
+    const rep = await axios.get(apiUrl);
+    res.status(rep.status).json(rep.data);
+  } catch (err) {
+    console.error("Erreur /conversations/:id/messages/proxy:", err);
+    res.status(500).json({ error: "Erreur proxy messages", details: err.message });
+  }
+});
 
 module.exports = router;
