@@ -83,7 +83,7 @@ const App = () => {
   useEffect(() => {
     if (initialized && keycloak?.authenticated && keycloak?.token) {
       setToken(keycloak.token);
-      console.log("✅ Token sauvegardé :", keycloak.token);
+  //    console.log("✅ Token sauvegardé :", keycloak.token);
     }
   }, [initialized, keycloak]);
 

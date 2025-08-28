@@ -34,7 +34,6 @@ router.post('/conversations', async (req, res) => {
 
 // Envoyer un message dans une conversation
 router.post('/messages', async (req, res) => {
-  console.log("POST /api/messages/messages called");
   console.log("Body received:", req.body);
   // Vérifie que le body contient bien les champs attendus
   const { conversation_id, utilisateur_id, contenu, type } = req.body;

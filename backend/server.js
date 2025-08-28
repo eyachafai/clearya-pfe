@@ -6,6 +6,8 @@ const { Server } = require("socket.io");
 
 const { initSession, initKeycloakMiddleware, keycloak } = require('./src/config/keycloak.config');
 const authRoutes = require('./src/routes/auth.routes');
+const keysRouter = require('./src/routes/keys.routes');
+
 const adminRoutes = require('./src/routes/routesAdmin');
 const pool = require('./src/config/db');
 const testKeycloakRoutes = require('./src/routes/testkeycloak');
@@ -54,6 +56,8 @@ io.on("connection", (socket) => {
 
 // ➤ Routes protégées
 app.use('/api/auth', authRoutes);
+app.use('/api/keys', keysRouter);
+
 // app.use('/api/admin', keycloak.protect('realm:admin'), adminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/testKeycloakRoutes', testKeycloakRoutes);

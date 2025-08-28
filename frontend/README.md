@@ -54,3 +54,12 @@ export default tseslint.config({
 ```
 
 npm install socket.io-client
+
+
+npm install crypto-js node-forge
+npm i --save-dev @types/crypto-js @types/node-forge
+
+
+crypto-js → AES (rapide, simple).
+
+node-forge → RSA (génération et gestion des clés).

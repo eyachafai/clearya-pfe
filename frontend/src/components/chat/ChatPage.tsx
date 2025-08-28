@@ -6,6 +6,9 @@ import { useKeycloak } from "@react-keycloak/web";
 import { Conversation } from "../../types/conversation";
 import { Message } from "../../types/message";
 import { io } from "socket.io-client";
+import { encryptAESKeyWithRSA, encryptWithAES, generateAESKey } from '../../utils/chiffrage';
+import { sendMessage } from '../../services/chatService';
+import { fetchPublicKey } from '../../services/keyService';
 const socket = io("http://localhost:5000");
 
 const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => {
@@ -22,6 +25,8 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
   const params = new URLSearchParams(location.search);
   const groupe_id = props.groupeIdProp ?? (Number(params.get("groupe_id")) || 1);
   const [utilisateur_id, setUtilisateurId] = useState<number | null>(null);
+
+
 
   useEffect(() => {
     let unsubSocket = false;
@@ -95,6 +100,33 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
     };
   }, [groupe_id, props.groupeNameProp, keycloak?.token]);
 
+
+  /* aes cryptage */
+  const [recipientPublicKey, setRecipientPublicKey] = useState<string | null>(null);
+  const [aesKey, setAesKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadKey = async () => {
+      try {
+        const key = await fetchPublicKey();
+        setRecipientPublicKey(key);
+        const newAesKey = generateAESKey();
+        setAesKey(newAesKey);
+      } catch (error) {
+        console.error("Impossible de charger la clé publique", error);
+      }
+    };
+    loadKey();
+  }, []);
+
+  const encryptedMessageData = recipientPublicKey && aesKey
+    ? encryptWithAES("Bonjour 👋", aesKey)
+    : null;
+
+  const encryptedAESKeyData = recipientPublicKey && aesKey
+    ? encryptAESKeyWithRSA(aesKey, recipientPublicKey)
+    : null;
+
   // Marquer automatiquement comme lu les messages non lus qui ne sont pas à moi
   useEffect(() => {
     if (!utilisateur_id) return;
@@ -150,13 +182,13 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
         conversation_id: conversation.id,
         utilisateur_id,
         contenu: input,
-        type: "text"
+        type: "text",
+        encryptedMessageData,
+        encryptedAESKeyData,
       };
-      await fetch("/api/messages/messages/realtime", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
+
+      await sendMessage(body)
+
       setInput("");
     } catch (err) {
       let msg = "Erreur JS frontend";
