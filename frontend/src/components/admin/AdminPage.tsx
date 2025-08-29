@@ -20,25 +20,11 @@ const AdminPage = () => {
 
   return (
     <div className="admin-container">
-      {/* Icône de déconnexion en haut à gauche */}
-      <div style={{ position: 'absolute', top: 20, left: 30, cursor: 'pointer' }} title="Déconnexion">
-        <FaSignOutAlt size={24} onClick={handleLogout} />
-      </div>
-      <div className="back-button" onClick={() => navigate('/Home')}>
-        <FaArrowLeft /> Retour
-      </div>
-      <div className="theme-toggle">
-        <label>
-          <input
-            type="checkbox"
-            checked={darkMode}
-            onChange={() => setDarkMode(!darkMode)}
-          />
-          {darkMode ? 'Mode Sombre' : 'Mode Clair'}
-        </label>
-      </div>
-
       <div className="main-content">
+        {/* Icône de déconnexion en haut à droite du carré */}
+        <div className="logout-icon" title="Déconnexion">
+          <FaSignOutAlt size={24} onClick={handleLogout} />
+        </div>
         <h2>Page Admin</h2>
         <div className="button-group">
           <button

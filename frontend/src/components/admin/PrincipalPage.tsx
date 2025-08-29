@@ -7,7 +7,7 @@ const PrincipalPage = () => {
 
   return (
     <div className="principal-container">
-      <div className="back-button" onClick={() => navigate('/AdminPage')}>
+      <div className="back-button" onClick={() => navigate('/admin')}>
         <FaArrowLeft /> Retour
       </div>
       <div className="principal-box">

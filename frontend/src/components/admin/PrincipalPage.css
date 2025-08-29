@@ -42,8 +42,8 @@ body.light-mode {
   .principal-btn {
     padding: 1rem 2rem;
     margin-top: 20px;
-    background-color: #4caf50;
-    color: white;
+    background: linear-gradient(90deg,#e0e3e8,#bdbdbd);
+    color: #232323;
     border: none;
     border-radius: 30px;
     cursor: pointer;
@@ -51,10 +51,12 @@ body.light-mode {
     transition: background-color 0.3s ease, transform 0.2s ease;
     width: 100%;
     max-width: 300px;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(44,62,80,0.08);
   }
   
   .principal-btn:hover {
-    background-color: #47984a;
+    background: linear-gradient(90deg,#bdbdbd,#e0e3e8);
+    color: #232323;
     transform: scale(1.05);
   }
-  

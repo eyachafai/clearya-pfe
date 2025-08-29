@@ -34,12 +34,15 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
     return () => window.removeEventListener("storage", checkUnread);
   }, []);
 
+  // Ajoute une classe spéciale au body uniquement sur la page Home
+  const isHome = window.location.pathname === '/';
+
   return (
     <div>
       <header>
         <div className="clearya-logo-bar" style={{ position: "relative" }}>
           <img src="/clearya-logo.svg" alt="Clearya" className="clearya-logo" />
-          <span className="clearya-title" style={{ position: "relative" }}>
+          <span className="clearya-title" style={{ position: "relative", marginLeft: 16, fontWeight: 700, fontSize: "1.5rem", color: "#232323" }}>
             Clearya
             {hasUnread && (
               <span

@@ -3,11 +3,16 @@ import UtilisateursPage from './UtilisateursPage';
 import GroupesPage from './grp/GroupesPage';
 import DepartementsPage from './grp/DepartementsPage';
 import { useNavigate } from 'react-router-dom';
-import { FaBook } from 'react-icons/fa';
+import { FaBook, FaSignOutAlt } from 'react-icons/fa';
 
 const GestionUtilisateursPage = () => {
   const [selected, setSelected] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const handleLogout = () => {
+    // Redirige vers la page Home après logout
+    window.location.href = '/';
+  };
 
   return (
     <div style={{
@@ -33,23 +38,41 @@ const GestionUtilisateursPage = () => {
           gap: "1.5rem",
           position: "relative"
         }}>
-          <h2 style={{
-            margin: 0,
-            fontWeight: 700,
-            fontSize: "2rem",
-            color: "#222",
-            letterSpacing: "1px"
-          }}>Gestion des utilisateurs</h2>
-          {/* Icône journal de connexion */}
-          <FaBook
-            title="Journal de connexion"
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "1.2rem"
+          }}>
+            <h2 style={{
+              margin: 0,
+              fontWeight: 700,
+              fontSize: "2rem",
+              color: "#222",
+              letterSpacing: "1px"
+            }}>Gestion des utilisateurs</h2>
+            {/* Icône journal de connexion à côté du titre */}
+            <FaBook
+              title="Journal de connexion"
+              style={{
+                fontSize: "1.7rem",
+                color: "#4caf50",
+                cursor: "pointer",
+                marginLeft: 12
+              }}
+              onClick={() => navigate('/journal-connexion')}
+            />
+          </div>
+          {/* Icône de déconnexion verte à droite */}
+          <FaSignOutAlt
+            title="Déconnexion"
             style={{
               fontSize: "1.7rem",
-              color: "#4caf50",
+              color: "#00c853",
               cursor: "pointer",
-              marginLeft: 18
+              marginLeft: "auto"
             }}
-            onClick={() => navigate('/journal-connexion')}
+            onClick={handleLogout}
           />
         </div>
         <div style={{ marginTop: '1.2rem', display: "flex", justifyContent: "center", gap: "1.5rem" }}>

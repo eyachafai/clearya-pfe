@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useKeycloak } from '@react-keycloak/web';
 import { useNavigate } from 'react-router-dom';
+import { FaSignOutAlt } from 'react-icons/fa';
 import './Home.css';
 
 const Home = () => {
@@ -13,7 +14,8 @@ const Home = () => {
   };
 
   const handleLogout = () => {
-    keycloak?.logout();
+    keycloak?.logout({ redirectUri: window.location.origin + '/' });
+    // Redirection automatique déjà gérée par Keycloak
   };
 
   useEffect(() => {
@@ -32,14 +34,17 @@ const Home = () => {
     // Appliquer le mode sombre ou clair
     document.body.classList.toggle('dark-mode', darkMode);
     document.body.classList.toggle('light-mode', !darkMode);
+    // Ajoute une classe spéciale au body pour la page Home
+    document.body.classList.add('home-page');
+    return () => {
+      document.body.classList.remove('home-page');
+    };
   }, [keycloak?.authenticated, darkMode, navigate]);
 
   return (
     <div className="home-container">
-      <div className="top-bar">
-        {/* Le bouton Espace Admin a été supprimé */}
-      </div>
-      <main className="main-content">
+      {/* Icône de déconnexion supprimée */}
+      <div className="main-content">
         <h1>Bienvenue sur Clearya</h1>
         {/* Toggle du mode */}
         <div className="theme-toggle">
@@ -64,7 +69,7 @@ const Home = () => {
             <button className="logout-btn" onClick={handleLogout}>Se déconnecter</button>
           </div>
         )}
-      </main>
+      </div>
     </div>
   );
 };
