@@ -15,6 +15,8 @@ const adminRoutes = require('./src/routes/routesAdmin');
 const pool = require('./src/config/db');
 const testKeycloakRoutes = require('./src/routes/testkeycloak');
 const messagesRoutes = require('./src/routes/messages.routes');
+const projetRoutes = require('./src/routes/projet.routes');
+const path = require('path');
 
 const app = express();
 // ➤ Sessions + Keycloak   /// il faut avant le middleware
@@ -41,7 +43,8 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "http://localhost:5173", // ton frontend React
-    methods: ["GET", "POST"]
+    methods: ["GET", "POST"], 
+    allowedHeaders: ["Content-Type"]
   }
 });
 
@@ -72,16 +75,18 @@ app.use('/api/keys', keysRouter);
 // app.use('/api/admin', keycloak.protect('realm:admin'), adminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/testKeycloakRoutes', testKeycloakRoutes);
+
 app.use('/api/messages', (req, res, next) => {
   console.log("API /api/messages route called:", req.method, req.url);
   next();
 });
 app.use('/api/messages', messagesRoutes);
+app.use('/api', projetRoutes);
 
-app.use((req, res, next) => {
+/* app.use((req, res, next) => {
   console.log("404 middleware catch:", req.method, req.url);
   next();
-});
+}); */
 
 // ➤ Route test backend
 app.get('/', (req, res) => {
@@ -89,6 +94,20 @@ app.get('/', (req, res) => {
   res.send('✅ Backend Clearya is running');
 });
 
+const filesDirectory = path.join(__dirname, 'uploads');
+
+// Route pour récupérer file par nom
+app.get('/file/:name', (req, res) => {
+  const fileName = req.params.name;
+  const filePath = path.join(filesDirectory, fileName);
+
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      console.error(err);
+      res.status(404).send('File non trouvée');
+    }
+  });
+});
 
 // ➤ Route test protégée Keycloak (exemple)
 app.get('/api/admin/test', keycloak.protect('realm:admin'), (req, res) => {

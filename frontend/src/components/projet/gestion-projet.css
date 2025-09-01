@@ -1,0 +1,174 @@
+/* Dashboard wrapper */
+.dashboard-wrapper {
+  display: flex;
+  min-height: 100vh;
+  background: #f7f8fa;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 220px;
+  background: #232323;
+  color: #fff;
+  padding: 24px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sidebar .logo {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 32px;
+}
+
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+  width: 100%;
+}
+
+.sidebar li {
+  padding: 12px 32px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  border-left: 4px solid transparent;
+  transition: background 0.2s;
+}
+
+.sidebar li.active,
+.sidebar li:hover {
+  background: #313131;
+  border-left: 4px solid #4caf50;
+}
+
+/* Main dashboard */
+.dashboard-main {
+  flex: 1;
+  padding: 32px;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.dashboard-header h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #232323;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-info .role {
+  background: #4caf50;
+  color: #fff;
+  border-radius: 12px;
+  padding: 2px 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.dashboard-content {
+  display: flex;
+  gap: 32px;
+}
+
+.projects-section,
+.members-section {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px #bdbdbd30;
+  padding: 24px;
+  flex: 1;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.btn-create {
+  background: #4caf50;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 18px;
+  font-size: 1rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.btn-create:hover {
+  background: #388e3c;
+}
+
+.create-project-modal {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.create-project-modal input {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid #bdbdbd;
+  font-size: 1rem;
+}
+
+.create-project-modal button {
+  background: #4caf50;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.create-project-modal button:last-child {
+  background: #d32f2f;
+}
+
+.projects-list,
+.members-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.project-item {
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+  font-size: 1.08rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.members-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.members-list .role {
+  background: #e0e0e0;
+  color: #232323;
+  border-radius: 8px;
+  padding: 2px 10px;
+  font-size: 0.95rem;
+  margin-left: 12px;
+}

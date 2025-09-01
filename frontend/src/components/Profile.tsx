@@ -91,7 +91,9 @@ const Profile = () => {
 
         <div className="profile-buttons">
           <button onClick={() => navigate('/mes-groupes-chat')}>Chat & Messagerie</button>
-          <button>Gestion de projet</button>
+          <button onClick={() => navigate('/gestion-projet')}>
+            Gestion de projet
+          </button>
         </div>
       </div>
     </div>

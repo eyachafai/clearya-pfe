@@ -198,4 +198,35 @@ router.post('/upload', (req, res) => {
   }
 });
 
+// Route pour recevoir un message vocal (audio)
+router.post('/send-audio', upload.single('audio'), async (req, res) => {
+  try {
+    const { conversation_id, utilisateur_id } = req.body;
+    if (!conversation_id || !utilisateur_id || !req.file) {
+      return res.status(400).json({ error: "Paramètres manquants ou fichier audio absent" });
+    }
+    // Sauvegarde le fichier audio dans uploads/
+    const uploadsDir = path.join(__dirname, '../../uploads');
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+    const audioFilename = `audio_${Date.now()}_${req.file.originalname}`;
+    const audioPath = path.join(uploadsDir, audioFilename);
+    fs.writeFileSync(audioPath, req.file.buffer);
+
+    // Enregistre le message dans la base (type audio)
+    const msg = await Message.create({
+      conversation_id,
+      utilisateur_id,
+      contenu: `${audioFilename}`,
+      type: "audio"
+    });
+
+    // Optionnel : tu peux aussi stocker le chemin dans la table Files si tu veux
+
+    res.json({ message: "Message vocal reçu", audioFilename, msg });
+  } catch (err) {
+    console.error("Erreur send-audio:", err);
+    res.status(500).json({ error: "Erreur lors de l'enregistrement du message vocal", details: err.message });
+  }
+});
+
 module.exports = router;

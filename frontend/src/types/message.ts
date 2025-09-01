@@ -12,3 +12,7 @@ export type Message = {
     email: string;
   };
 };
+
+export type UnreadCount = {
+  [groupeId: number]: number;
+};

@@ -13,6 +13,6 @@ const files = sequelize.define("Files", {
   timestamps: false
 });
 
-module.exports = File;
+module.exports = files;
 
 

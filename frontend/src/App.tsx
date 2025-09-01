@@ -12,6 +12,7 @@ import ChatPage from './components/chat/ChatPage'
 import GestionUtilisateursPage from './components/admin/GestionUtilisateursPage'
 import UtilisateursPage from './components/admin/UtilisateursPage';
 import MesGroupesChatPage from './components/chat/MesGroupesChatPage';
+import GestionProjet from './components/projet/gestion-projet';
 
 import { useKeycloak } from "@react-keycloak/web";
 import { setToken } from "./services/authService";
@@ -108,6 +109,7 @@ const App = () => {
           <Route path="/gestion-utilisateurs" element={<GestionUtilisateursPage />} />
           <Route path="/utilisateurs" element={<UtilisateursPage />} />
           <Route path="/mes-groupes-chat" element={<MesGroupesChatPage />} />
+          <Route path="/gestion-projet" element={<GestionProjet />} />
         </Routes>
       </AppLayout>
     </Router>

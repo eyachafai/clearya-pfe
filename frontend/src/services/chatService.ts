@@ -9,3 +9,16 @@ export const sendMessage = async (data: any) => {
         throw error;
     }
 };
+
+
+export const lireFile = async (fileName: any) => {
+    try {
+        const response = await apiClient.get(`/file/${fileName}`, {
+            responseType: "blob", // important si c’est un fichier binaire (pdf, image…)
+        });
+        return response.data;
+    } catch (error) {
+        console.error("Erreur lire file message:", error);
+        throw error;
+    }
+};
