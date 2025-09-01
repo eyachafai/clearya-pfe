@@ -4,14 +4,20 @@ import GroupesPage from './grp/GroupesPage';
 import DepartementsPage from './grp/DepartementsPage';
 import { useNavigate } from 'react-router-dom';
 import { FaBook, FaSignOutAlt } from 'react-icons/fa';
+import { useKeycloak } from '@react-keycloak/web';
 
 const GestionUtilisateursPage = () => {
   const [selected, setSelected] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { keycloak } = useKeycloak();
 
   const handleLogout = () => {
-    // Redirige vers la page Home après logout
-    window.location.href = '/';
+    // Déconnexion Keycloak puis redirection Home
+    if (keycloak && keycloak.logout) {
+      keycloak.logout({ redirectUri: window.location.origin + '/' });
+    } else {
+      window.location.href = '/';
+    }
   };
 
   return (
@@ -42,16 +48,17 @@ const GestionUtilisateursPage = () => {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            gap: "1.2rem"
+            gap: "1.2rem",
+            flex: 1
           }}>
             <h2 style={{
               margin: 0,
               fontWeight: 700,
               fontSize: "2rem",
               color: "#222",
-              letterSpacing: "1px"
+              letterSpacing: "1px",
+              textAlign: "center"
             }}>Gestion des utilisateurs</h2>
-            {/* Icône journal de connexion à côté du titre */}
             <FaBook
               title="Journal de connexion"
               style={{
@@ -63,7 +70,6 @@ const GestionUtilisateursPage = () => {
               onClick={() => navigate('/journal-connexion')}
             />
           </div>
-          {/* Icône de déconnexion verte à droite */}
           <FaSignOutAlt
             title="Déconnexion"
             style={{

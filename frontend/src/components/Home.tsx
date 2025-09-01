@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useKeycloak } from '@react-keycloak/web';
 import { useNavigate } from 'react-router-dom';
-import { FaSignOutAlt } from 'react-icons/fa';
 import './Home.css';
 
 const Home = () => {

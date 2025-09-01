@@ -12,8 +12,3 @@ export type Message = {
     email: string;
   };
 };
-
-type UnreadCount = {
-  [groupeId: number]: number;
-};
-export type { UnreadCount };

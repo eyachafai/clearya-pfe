@@ -34,5 +34,3 @@ const Utilisateur = sequelize.define('Utilisateur', {
 
 module.exports = Utilisateur;
 
-// SQL query to verify the local table
-// SELECT * FROM users ORDER BY id DESC;

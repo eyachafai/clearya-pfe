@@ -4,7 +4,16 @@ const axios = require('axios');
 const pool = require('../config/db');
 require('dotenv').config({ path: '../.env' });
 const { keycloak } = require('../config/keycloak.config');
-const { Conversation, Message, Groupe, Utilisateur } = require('../models');
+const { Conversation, Message, Groupe, Utilisateur} = require('../models');
+const {FileChunk}=require('../models/FileChunk')
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() }); // stocke en mémoire pour concaténation rapide
+const fs = require('fs');
+const path = require('path');
+const md5 = require('md5');
+const File = require('../models/Files');
+const uploadsDir = path.join(__dirname, '../../uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
 // Créer une conversation pour un groupe (si elle n'existe pas déjà)
 router.post('/conversations', async (req, res) => {
@@ -104,7 +113,7 @@ let ioInstance = null;
 function setSocketIo(io) {
   ioInstance = io;
 }
-router.setSocketIo = setSocketIo; // <-- Corrige ici : attache à router, pas à module.exports
+router.setSocketIo = setSocketIo; 
 
 // Nouvelle route API pour envoyer un message en temps réel (front → API → axios → backend socket → API → front)
 router.post('/messages/realtime', async (req, res) => {
@@ -151,6 +160,41 @@ router.get('/conversations/:conversation_id/messages/proxy', async (req, res) =>
   } catch (err) {
     console.error("Erreur /conversations/:id/messages/proxy:", err);
     res.status(500).json({ error: "Erreur proxy messages", details: err.message });
+  }
+});
+
+
+// Route to upload file
+router.post('/upload', (req, res) => {
+  const { name, currentChunkIndex, totalChunks } = req.query;
+
+  // Ensure temp directory exists before writing
+  const tempDir = path.join(__dirname, '../../temp');
+  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+
+  const firstChunk = parseInt(currentChunkIndex) === 0;
+  const lastChunk = parseInt(currentChunkIndex) === parseInt(totalChunks) - 1;
+
+  const fileExtension = name.split('.').pop();
+  const data = req.body.toString().split(',')[1];
+  const buffer = Buffer.from(data, 'base64');
+  const tempFilename = md5(name + req.ip + Math.random().toString('36').substring(0, 6)) + '.' + fileExtension;
+
+  // Append current chunk data to file in temp directory
+  fs.appendFileSync(path.join(tempDir, tempFilename), buffer);
+
+  if (lastChunk) {
+    const uploadsDir = path.join(__dirname, '../../uploads');
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+    const finalFilename = md5(Math.random().toString('36')).substring(0, 6) + '.' + fileExtension;
+    fs.renameSync(path.join(tempDir, tempFilename), path.join(uploadsDir, finalFilename));
+    res.json({ message: 'File uploaded', finalFilename });
+  } else {
+    res.status(200).json({
+      message: 'Chunk uploaded',
+      currentChunkIndex,
+      totalChunks
+    });
   }
 });
 

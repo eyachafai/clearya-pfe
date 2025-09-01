@@ -3,6 +3,9 @@ const express = require('express');
 const cors = require('cors');
 const http = require("http");
 const { Server } = require("socket.io");
+const bodyParser = require('body-parser'); // Body-parser to parse incoming request bodies
+const fs = require('fs'); // File system to handle file operations
+const md5 = require('md5'); // MD5 to generate hash
 
 const { initSession, initKeycloakMiddleware, keycloak } = require('./src/config/keycloak.config');
 const authRoutes = require('./src/routes/auth.routes');
@@ -53,6 +56,14 @@ io.on("connection", (socket) => {
     console.log("Utilisateur déconnecté :", socket.id);
   });
 });
+
+app.use('/uploads', express.static('uploads')); // Serve static files from 'uploads' directory
+
+// Parse incoming raw data
+app.use(bodyParser.raw({
+  type: 'application/octet-stream',
+  limit: '100mb'
+}));
 
 // ➤ Routes protégées
 app.use('/api/auth', authRoutes);

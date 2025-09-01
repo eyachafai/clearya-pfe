@@ -8,7 +8,8 @@ const Message = sequelize.define("Message", {
   contenu: { type: DataTypes.TEXT, allowNull: false },
   type: { type: DataTypes.STRING(16), defaultValue: 'text' },
   is_read: { type: DataTypes.BOOLEAN, defaultValue: false },
-  date_envoi: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+  date_envoi: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+  file_id: { type: DataTypes.INTEGER, references: { model: 'files', key: 'id' }, onDelete: 'SET NULL' }
 }, {
   tableName: 'message',
   timestamps: false

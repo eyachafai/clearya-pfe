@@ -206,6 +206,56 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
     }
   };
 
+  // Chunked upload state and logic
+  const [file, setFile] = useState<any>(null);
+  const [currentChunkIndex, setCurrentChunkIndex] = useState<number | null>(null);
+  const chunkSize = 1024 * 1024 * 5;
+
+  function handleUpload(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    setCurrentChunkIndex(0);
+  }
+
+  useEffect(() => {
+    async function uploadChunk(readerEvent: ProgressEvent<FileReader>) {
+      if (!file) return;
+      const data = readerEvent.target?.result;
+      const params = new URLSearchParams();
+      params.set('name', file.name);
+      params.set('currentChunkIndex', String(currentChunkIndex));
+      params.set('totalChunks', String(Math.ceil(file.size / chunkSize)));
+      const headers = { 'Content-Type': 'application/octet-stream' };
+      const url = 'http://localhost:5000/api/messages/upload?' + params.toString();
+
+      fetch(url, {
+        method: 'POST',
+        headers: headers,
+        body: data as BodyInit
+      }).then(response => response.json())
+        .then(res => {
+          const isLastChunk = currentChunkIndex === Math.ceil(file.size / chunkSize) - 1;
+          if (isLastChunk) {
+            file.finalFilename = res.finalFilename;
+            setCurrentChunkIndex(null);
+          } else {
+            setCurrentChunkIndex((currentChunkIndex ?? 0) + 1);
+          }
+        });
+    }
+
+    function readAndUploadCurrentChunk() {
+      if (!file || currentChunkIndex == null) return;
+      const from = currentChunkIndex * chunkSize;
+      const to = (currentChunkIndex + 1) * chunkSize >= file.size ? file.size : from + chunkSize;
+      const blob = file.slice(from, to);
+      const reader = new FileReader();
+      reader.onload = e => uploadChunk(e as ProgressEvent<FileReader>);
+      reader.readAsDataURL(blob);
+    }
+
+    if (currentChunkIndex != null) readAndUploadCurrentChunk();
+  }, [chunkSize, currentChunkIndex, file]);
+
   // WhatsApp-like layout
   return (
     <div className="wa-main">
@@ -257,6 +307,31 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
           <FaPaperPlane />
         </button>
       </form>
+      {/* Chunked upload UI */}
+      <div className={'main'}>
+        <input className={`input`} type="file" multiple={false}
+          onChange={e => { setFile(e.target.files ? e.target.files[0] : null); }}
+        />
+        <button onClick={handleUpload} className={'button'}>
+          Upload
+        </button>
+        <div className="files">
+          {file && (
+            <a
+              className="file"
+              target="_blank"
+              href={file.finalFilename ? 'http://localhost:5000/uploads/' + file.finalFilename : undefined}
+              rel="noreferrer"
+            >
+              <div>{ file.finalFilename ?
+                '100%' :
+                (<>{Math.round((currentChunkIndex ?? 0) / Math.ceil(file.size / chunkSize) * 100)}%</>)
+              }</div>
+              <div className="name">{file.name}</div>
+            </a>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
