@@ -7,7 +7,7 @@ import { Conversation } from "../../types/conversation";
 import { Message } from "../../types/message";
 import { io } from "socket.io-client";
 import { encryptAESKeyWithRSA, encryptWithAES, generateAESKey } from '../../utils/chiffrage';
-import { lireFile, sendMessage } from '../../services/chatService';
+import { sendMessage } from '../../services/chatService';
 import { fetchPublicKey } from '../../services/keyService';
 const socket = io("http://localhost:5000");
 
@@ -19,34 +19,12 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
   const [sending, setSending] = useState(false);
   const [groupeName, setGroupeName] = useState<string>(props.groupeNameProp || "");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [audioUrls, setAudioUrls] = useState<Record<string, string>>({});
 
   const { keycloak } = useKeycloak();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const groupe_id = props.groupeIdProp ?? (Number(params.get("groupe_id")) || 1);
   const [utilisateur_id, setUtilisateurId] = useState<number | null>(null);
-
-  useEffect(() => {
-    async function fetchAudioFiles() {
-      const newUrls: Record<string, string> = {}; // clé = nom du fichier
-      for (const msg of messages) {
-        if (msg.type !== "text") {
-          try {
-            const fileName = msg.contenu;
-            newUrls[fileName] = `http://localhost:5000/file/${fileName}`;
-
-            console.log("URL audio :", newUrls);
-
-          } catch (err) {
-            console.error("Erreur téléchargement fichier:", err);
-          }
-        }
-      }
-      setAudioUrls(newUrls); // <-- ici, on passe tout l'objet
-    }
-    fetchAudioFiles();
-  }, [messages]);
 
 
 
@@ -86,7 +64,6 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
         });
         if (!convRes.ok) throw new Error("Erreur serveur lors de la création de la conversation");
         const conv = await convRes.json();
-        console.log("conv ", conv)
         if (!conv?.id) throw new Error("Conversation non créée");
         setConversation(conv);
 
@@ -94,7 +71,6 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
         const msgRes = await fetch(`/api/messages/conversations/${conv.id}/messages/proxy`);
         if (!msgRes.ok) throw new Error("Erreur serveur lors du chargement des messages");
         const msgs = await msgRes.json();
-        console.log(msgs)
         setMessages(Array.isArray(msgs) ? msgs : []);
 
         // 4. Récupère le nom du groupe si besoin
@@ -123,6 +99,7 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
       socket.off("receiveMessage");
     };
   }, [groupe_id, props.groupeNameProp, keycloak?.token]);
+
 
   /* aes cryptage */
   const [recipientPublicKey, setRecipientPublicKey] = useState<string | null>(null);
@@ -222,7 +199,7 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
         conversation_id: conversation.id,
         utilisateur_id,
         contenu: input,
-        type: "audio",
+        type: "text",
         encryptedMessageData,
         encryptedAESKeyData,
       };
@@ -347,31 +324,17 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
               className={`wa-message-row${msg.utilisateur_id === utilisateur_id ? " me" : ""}`}
             >
               <div className="wa-bubble">
-                {/* 
-                 <audio
+                {/* Affichage audio si type audio */}
+                {msg.type === "audio" && msg.contenu?.startsWith("[audio]") ? (
+                  <audio
                     controls
-                    src="http://localhost:5000/file/audio_1756741603620_audio-message.webm"
-                    style={{ width: "100%" }}
+                    src={`/uploads/${msg.contenu.replace("[audio] ", "")}`}
+                    style={{ verticalAlign: "middle", width: "100%" }}
                   />
- */}
-                {msg.type === "audio" ? (
-                  msg.contenu === "[audio-chunk]" ? (
-                    <span style={{ color: "#888" }}>⏳ Message audio en cours...</span>
-                  ) : audioUrls[msg.contenu.replace("[audio]", "").trim()] ? (
-                    <audio
-                      controls
-                      src={audioUrls[msg.contenu.replace("[audio]", "").trim()]}
-                      style={{ width: "100%" }}
-                    />
-                  ) : (
-                    <span style={{ color: "#888" }}>Chargement audio...</span>
-                  )
                 ) : (
                   msg.contenu
                 )}
-
               </div>
-
               <div className="wa-meta">
                 {msg.utilisateur?.username || "moi"} · {new Date(msg.date_envoi).toLocaleTimeString()}
                 {idx === messages.length - 1 && msg.is_read && (
@@ -469,7 +432,7 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
               href={file.finalFilename ? 'http://localhost:5000/uploads/' + file.finalFilename : undefined}
               rel="noreferrer"
             >
-              <div>{file.finalFilename ?
+              <div>{ file.finalFilename ?
                 '100%' :
                 (<>{Math.round((currentChunkIndex ?? 0) / Math.ceil(file.size / chunkSize) * 100)}%</>)
               }</div>

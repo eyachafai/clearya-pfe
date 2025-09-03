@@ -216,7 +216,7 @@ router.post('/send-audio', upload.single('audio'), async (req, res) => {
     const msg = await Message.create({
       conversation_id,
       utilisateur_id,
-      contenu: `${audioFilename}`,
+      contenu: `[audio] ${audioFilename}`,
       type: "audio"
     });
 

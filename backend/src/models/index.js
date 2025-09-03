@@ -5,6 +5,9 @@ const Groupe = require('./Groupe');
 const GroupeUtilisateur = require('./GroupeUtilisateur');
 const Conversation = require('./Conversation');
 const Message = require('./Message');
+const Projet = require('./projet');
+const ProjetMembre = require('./ProjetMembre');
+const Tache = require('./tache');
 
 // Associations pour la messagerie et groupes
 Groupe.hasMany(GroupeUtilisateur, { foreignKey: 'groupe_id', as: 'groupeUtilisateurs' });
@@ -23,4 +26,7 @@ module.exports = {
   GroupeUtilisateur,
   Conversation,
   Message,
+  Projet,
+  ProjetMembre,
+  Tache,
 };
