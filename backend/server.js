@@ -6,6 +6,7 @@ const { Server } = require("socket.io");
 const bodyParser = require('body-parser'); // Body-parser to parse incoming request bodies
 const fs = require('fs'); // File system to handle file operations
 const md5 = require('md5'); // MD5 to generate hash
+const path = require('path');
 
 const { initSession, initKeycloakMiddleware, keycloak } = require('./src/config/keycloak.config');
 const authRoutes = require('./src/routes/auth.routes');
@@ -58,7 +59,11 @@ io.on("connection", (socket) => {
   });
 });
 
-app.use('/uploads', express.static('uploads')); // Serve static files from 'uploads' directory
+// Ce middleware doit être AVANT tes routes API
+app.use('/uploads', (req, res, next) => {
+  console.log('Requête reçue sur /uploads:', req.url);
+  next();
+}, express.static(path.join(__dirname, 'uploads'))); // <-- 'uploads' doit être au même niveau que server.js
 
 // Parse incoming raw data
 app.use(bodyParser.raw({

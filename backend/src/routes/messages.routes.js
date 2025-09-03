@@ -163,10 +163,9 @@ router.get('/conversations/:conversation_id/messages/proxy', async (req, res) =>
   }
 });
 
-
 // Route to upload file
-router.post('/upload', (req, res) => {
-  const { name, currentChunkIndex, totalChunks } = req.query;
+router.post('/upload', async (req, res) => {
+  const { name, currentChunkIndex, totalChunks, conversation_id, utilisateur_id } = req.query;
 
   // Ensure temp directory exists before writing
   const tempDir = path.join(__dirname, '../../temp');
@@ -188,7 +187,23 @@ router.post('/upload', (req, res) => {
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
     const finalFilename = md5(Math.random().toString('36')).substring(0, 6) + '.' + fileExtension;
     fs.renameSync(path.join(tempDir, tempFilename), path.join(uploadsDir, finalFilename));
-    res.json({ message: 'File uploaded', finalFilename });
+
+    // Enregistrement du message fichier et émission socket.io si conversation_id et utilisateur_id sont fournis
+    let msg = null;
+    if (conversation_id && utilisateur_id) {
+      msg = await Message.create({
+        conversation_id,
+        utilisateur_id,
+        contenu: `[file] ${finalFilename}`,
+        type: "file"
+      });
+      if (ioInstance) {
+        ioInstance.to(`room_${conversation_id}`).emit("receiveMessage", msg);
+        ioInstance.emit("receiveMessage", msg); // fallback
+      }
+    }
+
+    res.json({ message: 'File uploaded', finalFilename, msg });
   } else {
     res.status(200).json({
       message: 'Chunk uploaded',
@@ -220,13 +235,23 @@ router.post('/send-audio', upload.single('audio'), async (req, res) => {
       type: "audio"
     });
 
-    // Optionnel : tu peux aussi stocker le chemin dans la table Files si tu veux
+    // Émission socket temps réel
+    if (ioInstance) {
+      ioInstance.to(`room_${conversation_id}`).emit("receiveMessage", msg);
+      ioInstance.emit("receiveMessage", msg); // fallback pour clients hors room
+    }
 
     res.json({ message: "Message vocal reçu", audioFilename, msg });
   } catch (err) {
     console.error("Erreur send-audio:", err);
     res.status(500).json({ error: "Erreur lors de l'enregistrement du message vocal", details: err.message });
   }
+});
+
+// Si tu veux juste le log ici pour debug temporaire (pas recommandé en prod) :
+router.use('/uploads', (req, res, next) => {
+  console.log('Requête reçue sur /uploads:', req.url);
+  next();
 });
 
 module.exports = router;

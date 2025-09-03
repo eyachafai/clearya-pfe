@@ -11,6 +11,8 @@ import { sendMessage } from '../../services/chatService';
 import { fetchPublicKey } from '../../services/keyService';
 const socket = io("http://localhost:5000");
 
+const BACKEND_URL = "http://localhost:5000";
+
 const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -27,6 +29,13 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
   const [utilisateur_id, setUtilisateurId] = useState<number | null>(null);
 
 
+
+  useEffect(() => {
+    // Join la room du groupe pour recevoir les messages en temps réel
+    if (conversation?.id) {
+      socket.emit("joinRoom", { conversation_id: conversation.id });
+    }
+  }, [conversation?.id]);
 
   useEffect(() => {
     let unsubSocket = false;
@@ -86,6 +95,7 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
         socket.on("receiveMessage", (data) => {
           if (!unsubSocket) setMessages((prev) => [...prev, data]);
         });
+        // On ne traite plus sendMessage côté client (évite le double affichage)
       } catch (err: any) {
         setMessages([]);
         alert(err?.message || "Erreur lors du chargement du chat.");
@@ -97,6 +107,7 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
     return () => {
       unsubSocket = true;
       socket.off("receiveMessage");
+      // socket.off("sendMessage"); // inutile
     };
   }, [groupe_id, props.groupeNameProp, keycloak?.token]);
 
@@ -147,27 +158,7 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
     });
   }, [messages, utilisateur_id]);
 
-  // Scroll auto en bas UNIQUEMENT à l'ouverture du chat (pas à chaque message)
-  useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => {
-        const ref = messagesEndRef.current;
-        if (ref) {
-          // Cherche le parent scrollable (.wa-messages)
-          let parent = ref.parentElement;
-          // Si le parent n'est pas scrollable, cherche plus haut
-          while (parent && parent !== document.body && parent.scrollHeight <= parent.clientHeight) {
-            parent = parent.parentElement;
-          }
-          if (parent && parent.scrollHeight > parent.clientHeight) {
-            parent.scrollTop = parent.scrollHeight;
-          } else {
-            ref.scrollIntoView({ behavior: "auto" });
-          }
-        }
-      }, 0);
-    }
-  }, [conversation?.id]);
+  
 
   // Envoi d'un message (temps réel via API)
   const handleSend = async (e?: React.FormEvent) => {
@@ -183,12 +174,13 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
         const audioFile = new File([audioBlob], "audio-message.webm");
         const formData = new FormData();
         formData.append('audio', audioFile);
-        formData.append('conversation_id', String(conversation.id)); // <-- convert to string
-        formData.append('utilisateur_id', String(utilisateur_id));   // <-- convert to string
-        await fetch('/api/messages/send-audio', {
+        formData.append('conversation_id', String(conversation.id));
+        formData.append('utilisateur_id', String(utilisateur_id));
+        const res = await fetch('/api/messages/send-audio', {
           method: 'POST',
           body: formData
         });
+        // On n'ajoute pas le message localement, on attend receiveMessage du serveur
         setAudioBlob(null);
         setInput("");
         setSending(false);
@@ -204,8 +196,8 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
         encryptedAESKeyData,
       };
 
-      await sendMessage(body)
-
+      await sendMessage(body);
+      // On n'ajoute pas le message localement, on attend receiveMessage du serveur
       setInput("");
     } catch (err) {
       let msg = "Erreur JS frontend";
@@ -272,6 +264,9 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
       params.set('name', file.name);
       params.set('currentChunkIndex', String(currentChunkIndex));
       params.set('totalChunks', String(Math.ceil(file.size / chunkSize)));
+      // Ajout conversation_id et utilisateur_id pour l'envoi temps réel côté backend
+      if (conversation?.id) params.set('conversation_id', String(conversation.id));
+      if (utilisateur_id) params.set('utilisateur_id', String(utilisateur_id));
       const headers = { 'Content-Type': 'application/octet-stream' };
       const url = 'http://localhost:5000/api/messages/upload?' + params.toString();
 
@@ -285,6 +280,7 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
           if (isLastChunk) {
             file.finalFilename = res.finalFilename;
             setCurrentChunkIndex(null);
+            // Plus besoin d'appeler /send-file, le backend gère l'émission socket.io
           } else {
             setCurrentChunkIndex((currentChunkIndex ?? 0) + 1);
           }
@@ -302,9 +298,8 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
     }
 
     if (currentChunkIndex != null) readAndUploadCurrentChunk();
-  }, [chunkSize, currentChunkIndex, file]);
+  }, [chunkSize, currentChunkIndex, file, conversation?.id, utilisateur_id]);
 
-  // WhatsApp-like layout
   return (
     <div className="wa-main">
       <div className="wa-main-header">
@@ -318,31 +313,76 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
         ) : messages.length === 0 ? (
           <div style={{ color: "#888", textAlign: "center" }}>Aucun message.</div>
         ) : (
-          Array.isArray(messages) && messages.map((msg, idx) => (
-            <div
-              key={msg.id}
-              className={`wa-message-row${msg.utilisateur_id === utilisateur_id ? " me" : ""}`}
-            >
-              <div className="wa-bubble">
-                {/* Affichage audio si type audio */}
-                {msg.type === "audio" && msg.contenu?.startsWith("[audio]") ? (
-                  <audio
-                    controls
-                    src={`/uploads/${msg.contenu.replace("[audio] ", "")}`}
-                    style={{ verticalAlign: "middle", width: "100%" }}
+          Array.isArray(messages) && messages.map((msg, idx) => {
+            const contenu = msg.contenu?.trim();
+            if (!contenu) return null;
+
+            let displayedContent: React.ReactNode = contenu;
+
+            // Affichage audio (avec icône cliquable si pas d'audio tag direct)
+            if (msg.type === "audio" && contenu.startsWith("[audio]")) {
+              const audioFile = contenu.replace("[audio] ", "");
+              displayedContent = (
+                <AudioPlayer filename={audioFile} />
+              );
+            }
+            // Affichage image ou fichier
+            else if (msg.type === "file" && contenu.startsWith("[file]")) {
+              const filename = contenu.replace("[file] ", "");
+              const ext = filename.split('.').pop()?.toLowerCase();
+              const isImage = ["jpg", "jpeg", "png", "gif", "webp"].includes(ext || "");
+              const isAudio = ["mp3", "wav", "ogg", "webm"].includes(ext || "");
+
+              if (isImage) {
+                displayedContent = (
+                  <img
+                    src={`${BACKEND_URL}/uploads/${filename}`}
+                    alt={filename}
+                    style={{
+                      maxWidth: "220px",
+                      maxHeight: "220px",
+                      borderRadius: 8,
+                      display: "block",
+                      background: "#eee",
+                      objectFit: "contain",
+                      margin: "0 auto"
+                    }}
+                    onError={e => {
+                      (e.target as HTMLImageElement).style.display = "none";
+                      console.error("Erreur chargement image:", `${BACKEND_URL}/uploads/${filename}`);
+                    }}
                   />
-                ) : (
-                  msg.contenu
-                )}
+                );
+              } else if (isAudio) {
+                displayedContent = (
+                  <AudioPlayer filename={filename} />
+                );
+              } else {
+                displayedContent = (
+                  <a href={`${BACKEND_URL}/uploads/${filename}`} target="_blank" rel="noopener noreferrer">
+                    📎 {filename}
+                  </a>
+                );
+              }
+            }
+
+            return (
+              <div
+                key={msg.id || msg.contenu + msg.date_envoi}
+                className={`wa-message-row${msg.utilisateur_id === utilisateur_id ? " me" : ""}`}
+              >
+                <div className="wa-bubble" style={{ textAlign: "center" }}>
+                  {displayedContent}
+                </div>
+                <div className="wa-meta">
+                  {msg.utilisateur?.username || "moi"} · {new Date(msg.date_envoi).toLocaleTimeString()}
+                  {idx === messages.length - 1 && msg.is_read && (
+                    <span className="vu">vu</span>
+                  )}
+                </div>
               </div>
-              <div className="wa-meta">
-                {msg.utilisateur?.username || "moi"} · {new Date(msg.date_envoi).toLocaleTimeString()}
-                {idx === messages.length - 1 && msg.is_read && (
-                  <span className="vu">vu</span>
-                )}
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
         <div ref={messagesEndRef} />
       </div>
@@ -446,3 +486,31 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
 }
 
 export default ChatPage;
+
+// Ajoute ce composant utilitaire dans le même fichier (ou à part si tu préfères)
+function AudioPlayer({ filename }: { filename: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  const handlePlay = () => {
+    audioRef.current?.play();
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <button
+        onClick={handlePlay}
+        style={{
+          background: "#fff",
+          border: "none",
+          cursor: "pointer",
+          fontSize: "2rem",
+          marginRight: 8
+        }}
+        title="Écouter l'audio"
+      >
+        <span role="img" aria-label="audio">🔊</span>
+      </button>
+      <audio ref={audioRef} src={`${BACKEND_URL}/uploads/${filename}`} preload="auto" />
+    </div>
+  );
+}
