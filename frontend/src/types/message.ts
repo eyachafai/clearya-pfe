@@ -11,6 +11,8 @@ export type Message = {
     username: string;
     email: string;
   };
+  encryptedMessageData?: string;
+  encryptedAESKeyData?: string;
 };
 
 export type UnreadCount = {

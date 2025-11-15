@@ -13,16 +13,16 @@ const PrincipalPage = () => {
       <div className="principal-box">
         <h1>Page Principale Admin</h1>
         
-        {/* Bouton Journal de Connexion supprimé */}
-        
-        {/* <button className="principal-btn" onClick={() => navigate('/groupes')}>
-          Gestion des groupes
-        </button> */}
-        
+                
         <button className="principal-btn" onClick={() => navigate('/gestion-utilisateurs')}>
           Gestion des utilisateurs
         </button>
-        
+
+         <button className="principal-btn" onClick={() => navigate('/tickets')}>
+          Gestion des tickets
+        </button> 
+
+       
       </div>
     </div>
   );

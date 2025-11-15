@@ -1,11 +1,25 @@
 const express = require('express');
 const router = express.Router();
-const { Groupe, GroupeUtilisateur, Utilisateur, Projet, ProjetMembre, Tache } = require('../models');
+const { Groupe, GroupeUtilisateur, Utilisateur, Projet, ProjetMembre, Tache, Ticket } = require('../models');
 const sequelize = require('../config/db');
 
 // Associations
 GroupeUtilisateur.belongsTo(Utilisateur, { foreignKey: 'utilisateur_id' });
 GroupeUtilisateur.belongsTo(Groupe, { foreignKey: 'groupe_id' });
+
+// Liste des états possibles pour les taches
+const ETATS_TACHE = [
+  "à faire",
+  "en cours",
+  "terminée"];
+
+// Liste des états possibles pour les tickets
+const ETATS_Ticket = [
+  "nouveau",
+  "en cours",
+  "resolu",
+  "fermee"
+];
 
 // GET /api/groupes-utilisateur/:utilisateur_id
 router.get('/groupes-utilisateur/:utilisateur_id', async (req, res) => {
@@ -187,6 +201,10 @@ router.get('/projet/:id/membres', async (req, res) => {
       role: m.role,
       keycloak_id: m.Utilisateur?.keycloak_id // Ajoute keycloak_id dans la réponse
     }));
+    // DEBUG: Affiche les membres envoyés au frontend
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[API] Membres projet envoyés au frontend:', membres);
+    }
     res.json(result);
   } catch (err) {
     console.error("[API] Erreur récupération membres projet:", err);
@@ -250,9 +268,9 @@ router.get('/projet/:id/taches', async (req, res) => {
         username: t.membre.username,
         email: t.membre.email,
         name: t.membre.first_name + ' ' + t.membre.last_name,
-        keycloak_id: t.membre.keycloak_id // Ajoute keycloak_id dans la réponse
+        keycloak_id: t.membre.keycloak_id 
       } : null,
-      etat: t.etat // Ajoute l'état si besoin
+      etat: t.etat 
     }));
     res.json(result);
   } catch (err) {
@@ -263,19 +281,23 @@ router.get('/projet/:id/taches', async (req, res) => {
 // POST /api/projet/:id/taches
 router.post('/projet/:id/taches', async (req, res) => {
   const { id } = req.params;
-  const { titre, description, membre_id } = req.body;
+  const { titre, description, membre_id, etat } = req.body;
+
   if (!titre || !membre_id) {
     return res.status(400).json({ error: "titre et membre_id requis" });
   }
+
   try {
     const tache = await Tache.create({
       titre,
       description,
       projet_id: id,
-      membre_id
+      membre_id,
+      etat // ici direct, pas besoin de etatToInsert
     });
     res.status(201).json(tache);
   } catch (err) {
+    console.error("Erreur création tâche:", err);
     res.status(500).json({ error: "Erreur création tâche", details: err.message });
   }
 });
@@ -318,6 +340,35 @@ router.put('/projet/:id/taches/:tache_id', async (req, res) => {
   }
 });
 
+// PATCH /api/projet/:projet_id/taches/:tache_id/etat
+router.patch('/projet/:projet_id/taches/:tache_id/etat', async (req, res) => {
+  const { projet_id, tache_id } = req.params;
+  const { etat, utilisateur_id } = req.body;
+  const allowed = ETATS_TACHE;
+  if (!allowed.includes(etat)) {
+    return res.status(400).json({ error: "Etat invalide" });
+  }
+  if (!utilisateur_id) return res.status(400).json({ error: "utilisateur_id requis" });
+
+  // Récupère la tâche
+  const tache = await Tache.findOne({ where: { id: tache_id, projet_id } });
+  if (!tache) return res.status(404).json({ error: "Tâche non trouvée" });
+
+  // Seul le membre assigné peut changer l'état
+  const isAssignee = Number(tache.membre_id) === Number(utilisateur_id);
+  if (!isAssignee) {
+    return res.status(403).json({ error: "Vous n'êtes pas autorisé à changer cet état" });
+  }
+
+  const oldEtat = tache.etat;
+  await tache.update({ etat });
+
+  // (Optionnel) log dans la console
+  console.log(`[API] Etat tâche ${tache.id} changé: ${oldEtat} → ${etat} par user ${utilisateur_id}`);
+
+  res.json(tache);
+});
+
 // DELETE /api/projets/:id
 router.delete('/projets/:id', async (req, res) => {
   const { id } = req.params;
@@ -336,5 +387,176 @@ router.delete('/projets/:id', async (req, res) => {
     res.status(500).json({ error: "Erreur suppression projet", details: err.message });
   }
 });
+
+
+// GET /api/taches/etats
+router.get('/taches/etats', (req, res) => {
+  res.json(ETATS_TACHE);
+});
+
+
+
+
+// GET /api/tickets?assignee_id=...&etat=...
+router.get('/tickets', async (req, res) => {
+  const { assignee_id, etat } = req.query;
+  const where = {};
+  if (assignee_id) where.assignee_id = assignee_id;
+  if (etat) where.etat = etat;
+  try {
+    const tickets = await Ticket.findAll({
+      where,
+      include: [
+        { model: Utilisateur, as: 'assignee', attributes: ['id', 'username', 'email'] },
+        { model: Utilisateur, as: 'creator', attributes: ['id', 'username', 'email'] }
+      ],
+      order: [['created_at', 'DESC']]
+    });
+    res.json(tickets);
+  } catch (err) {
+    console.error("[API] Erreur récupération tickets:", err); // Ajoute ce log pour debug
+    res.status(500).json({ error: "Erreur récupération tickets", details: err.message });
+  }
+});
+
+// GET /api/tickets/:id
+router.get('/tickets/:id', async (req, res) => {
+  try {
+    const ticket = await Ticket.findByPk(req.params.id, {
+      include: [
+        { model: Utilisateur, as: 'assignee', attributes: ['id', 'username', 'email'] },
+        { model: Utilisateur, as: 'creator', attributes: ['id', 'username', 'email'] }
+      ]
+    });
+    if (!ticket) return res.status(404).json({ error: "Ticket non trouvé" });
+    res.json(ticket);
+  } catch (err) {
+    res.status(500).json({ error: "Erreur récupération ticket", details: err.message });
+  }
+});
+
+// POST /api/tickets
+router.post('/tickets', async (req, res) => {
+  const { titre, description, assignee_id, created_by } = req.body;
+  if (!titre || !assignee_id || !created_by) {
+    return res.status(400).json({ error: "titre, assignee_id, created_by requis" });
+  }
+  try {
+    const ticket = await Ticket.create({
+      titre,
+      description,
+      assignee_id,
+      created_by
+    });
+    res.status(201).json(ticket);
+  } catch (err) {
+    res.status(500).json({ error: "Erreur création ticket", details: err.message });
+  }
+});
+
+// PUT /api/tickets/:id
+router.put('/tickets/:id', async (req, res) => {
+  const { titre, description, assignee_id, etat, resolved_at } = req.body;
+  try {
+    const ticket = await Ticket.findByPk(req.params.id);
+    if (!ticket) return res.status(404).json({ error: "Ticket non trouvé" });
+    if (titre !== undefined) ticket.titre = titre;
+    if (description !== undefined) ticket.description = description;
+    if (assignee_id !== undefined) ticket.assignee_id = assignee_id;
+    if (etat !== undefined) ticket.etat = etat;
+    if (resolved_at !== undefined) ticket.resolved_at = resolved_at;
+    await ticket.save();
+    res.json({ success: true, ticket });
+  } catch (err) {
+    res.status(500).json({ error: "Erreur mise à jour ticket", details: err.message });
+  }
+});
+
+// PATCH /api/tickets/:id/etat
+router.patch('/tickets/:id/etat', async (req, res) => {
+  const { etat, utilisateur_id } = req.body;
+  const allowed = ["nouveau", "en cours", "resolu", "ferme", "fermée"];
+  if (!allowed.includes(etat)) {
+    return res.status(400).json({ error: "Etat invalide" });
+  }
+  if (!utilisateur_id) return res.status(400).json({ error: "utilisateur_id requis" });
+  try {
+    const ticket = await Ticket.findByPk(req.params.id);
+    if (!ticket) return res.status(404).json({ error: "Ticket non trouvé" });
+    // Seul l'assignee peut changer l'état
+    if (Number(ticket.assignee_id) !== Number(utilisateur_id)) {
+      return res.status(403).json({ error: "Vous n'êtes pas autorisé à changer cet état" });
+    }
+    const oldEtat = ticket.etat;
+    ticket.etat = etat;
+    if (etat === "resolu" || etat === "ferme" || etat === "fermée") {
+      ticket.resolved_at = new Date();
+    }
+    await ticket.save();
+    // (Optionnel) notification ici
+    res.json(ticket);
+  } catch (err) {
+    res.status(500).json({ error: "Erreur changement état ticket", details: err.message });
+  }
+});
+
+// DELETE /api/tickets/:id
+router.delete('/tickets/:id', async (req, res) => {
+  try {
+    const deleted = await Ticket.destroy({ where: { id: req.params.id } });
+    if (deleted) {
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: "Ticket non trouvé" });
+    }
+  } catch (err) {
+    res.status(500).json({ error: "Erreur suppression ticket", details: err.message });
+  }
+});
+
+// GET /api/admin/groupes-utilisateur/:id
+router.get('/admin/groupes-utilisateur/:id', async (req, res) => {
+  const utilisateur_id = req.params.id;
+  console.log("[API] Route /admin/groupes-utilisateur appelée avec utilisateur_id:", utilisateur_id);
+
+  try {
+    // Log la requête brute SQL générée par Sequelize
+    const groupes = await GroupeUtilisateur.findAll({
+      where: { utilisateur_id },
+      include: [{ model: require('../models/Groupe'), attributes: ['id', 'name'] }]
+    });
+    console.log("[API] GroupesUtilisateur trouvés:", groupes);
+
+    // Log le mapping final envoyé au frontend
+    const result = groupes.map(g => ({
+      id: g.Groupe?.id,
+      name: g.Groupe?.name,
+      role: g.role
+    }));
+    console.log("[API] Résultat envoyé au frontend:", result);
+
+    res.json(result);
+  } catch (err) {
+    console.error("[API] Erreur récupération groupes-utilisateur:", err);
+    res.status(500).json({ error: "Erreur serveur", details: err.message });
+  }
+});
+
+// NEW: GET /api/users/by-keycloak/:keycloakId
+router.get('/users/by-keycloak/:keycloakId', async (req, res) => {
+  const { keycloakId } = req.params;
+  console.log('[API] GET user by keycloakId:', keycloakId);
+  try {
+    const user = await Utilisateur.findOne({ where: { keycloak_id: keycloakId } });
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    }
+    res.json({ id: user.id, username: user.username, email: user.email, first_name: user.first_name, last_name: user.last_name, keycloak_id: user.keycloak_id });
+  } catch (err) {
+    console.error('[API] Erreur récupération utilisateur par keycloak:', err);
+    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+  }
+});
+
 
 module.exports = router;

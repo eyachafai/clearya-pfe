@@ -6,64 +6,79 @@ import { Group } from '../../../types/groupe';
 import { useKeycloak } from "@react-keycloak/web";
 
 const GroupesPage = () => {
+  console.log("🧩 GroupesPage monté !");
+
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(false);
   const [openChatGroupeId, setOpenChatGroupeId] = useState<string | null>(null);
 
   const { keycloak } = useKeycloak();
-
-  // Utilise un ref pour stocker la clé du chat (pas de useState dans le bloc conditionnel !)
   const chatKeyRef = useRef<number>(Date.now());
 
-  useEffect(() => {
-    fetchGroups();
+  // ---- Fonction de récupération des groupes ----
+const fetchGroups = async () => {
+  console.log("🚀 fetchGroups() LANCÉ !");
+  setLoading(true);
+  try {
+    const syncUrl = "http://localhost:5000/api/admin/groupes/sync";
+    console.log("🌍 Envoi POST vers :", syncUrl);
 
-      // Met à jour la clé du chat à chaque changement d'id (toujours en dehors du render)
-      if (openChatGroupeId) {
+    const syncRes = await fetch(syncUrl, { method: "POST" });
+    console.log("🧾 syncRes.status =", syncRes.status);
+
+    if (syncRes.ok) {
+      const syncData = await syncRes.json();
+      console.log("✅ syncData =", syncData);
+      alert(syncData.message || "Synchronisation des groupes terminée !");
+    } else {
+      const errText = await syncRes.text();
+      console.warn("⚠️ Erreur sync :", errText);
+      alert("Erreur lors de la synchronisation : " + errText);
+    }
+
+    const membresUrl = "http://localhost:5000/api/admin/groupes/membres";
+    console.log("🌍 Fetch GET vers :", membresUrl);
+
+    const res = await fetch(membresUrl);
+    console.log("🧾 res.status =", res.status);
+
+    const data: Group[] = await res.json();
+    console.log("📦 Données reçues du backend :", data);
+
+    setGroups(data);
+  } catch (err) {
+    console.error("💥 Erreur lors du chargement des groupes :", err);
+    alert("Erreur serveur !");
+  } finally {
+    console.log("🏁 Fin du fetchGroups()");
+    setLoading(false);
+  }
+};
+
+  // ---- Hooks React ----
+  useEffect(() => {
+    console.log("🟢 useEffect appelé — lancement du fetchGroups()");
+    fetchGroups();
+  }, []);
+
+  useEffect(() => {
+    if (openChatGroupeId) {
       chatKeyRef.current = Date.now();
     }
-
   }, [openChatGroupeId]);
 
-  const fetchGroups = async () => {
-    setLoading(true);
-    try {
-      // Synchronise les groupes ET les membres (table groupe + groupe_utilisateur)
-      const syncRes = await fetch("http://localhost:5000/api/admin/groupes/sync", { method: "POST" });
-      if (syncRes.ok) {
-        const syncData = await syncRes.json();
-        alert(syncData.message || "Synchronisation des groupes et membres terminée !");
-      } else {
-        const errText = await syncRes.text();
-        alert("Erreur lors de la synchronisation des groupes : " + errText);
-      }
-      // Recharge la liste des groupes/membres depuis le backend
-      const res = await fetch("http://localhost:5000/api/admin/groupes/membres");
-      const data: Group[] = await res.json();
-      setGroups(data);
-    } catch (err) {
-      console.error("Erreur lors du chargement des groupes :", err);
-      alert("Erreur serveur lors du chargement des groupes !");
-    } finally {
-      setLoading(false);
-    }
-  };
 
-
+  // ---- Vue principale ----
   if (openChatGroupeId) {
-    console.log("=== DEBUG OUVERTURE CHAT ===");
-    console.log("openChatGroupeId (string):", openChatGroupeId);
-    // Correction : trouve le groupe par id dans le tableau groups (id local, pas index ni keycloak_id)
     const selectedGroup = groups.find(g => String(g.id) === String(openChatGroupeId));
     const groupeIdNumber = selectedGroup ? Number(selectedGroup.id) : Number(openChatGroupeId);
-    // Passe le nom du groupe en prop à ChatPage pour affichage correct
     const groupeName = selectedGroup ? selectedGroup.name : "";
-    console.log("groupeIdNumber passé à ChatPage:", groupeIdNumber);
-    console.log("LISTE GROUPES:", groups.map(g => ({ id: g.id, name: g.name })));
-    console.log("RENDER ChatPage avec groupeIdProp =", groupeIdNumber);
 
-    // Correction : la clé du composant ChatPage doit changer à chaque changement de groupe pour forcer le reset
-    // On utilise simplement l'id du groupe comme clé (inutile d'ajouter le timestamp)
+    console.log("=== DEBUG OUVERTURE CHAT ===");
+    console.log("openChatGroupeId:", openChatGroupeId);
+    console.log("groupeIdNumber:", groupeIdNumber);
+    console.log("LISTE GROUPES:", groups.map(g => ({ id: g.id, name: g.name })));
+
     return (
       <div
         style={{
@@ -78,7 +93,6 @@ const GroupesPage = () => {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: 0,
         }}
       >
         <button
@@ -95,17 +109,13 @@ const GroupesPage = () => {
             left: 32,
             zIndex: 1100,
             fontSize: 44,
-            boxShadow: "0 2px 12px #00c85322",
-            transition: "background 0.2s, box-shadow 0.2s",
-            outline: "none"
           }}
           onClick={() => setOpenChatGroupeId(null)}
           title="Fermer le chat"
-          onMouseOver={e => (e.currentTarget.style.background = "#e8f5e9")}
-          onMouseOut={e => (e.currentTarget.style.background = "none")}
         >
           <FaTimesCircle />
         </button>
+
         <div
           style={{
             width: "100%",
@@ -122,7 +132,6 @@ const GroupesPage = () => {
             position: "relative"
           }}
         >
-          {/* Passe groupeName en prop */}
           <ChatPage
             key={groupeIdNumber}
             groupeIdProp={groupeIdNumber}
@@ -133,6 +142,7 @@ const GroupesPage = () => {
     );
   }
 
+  // ---- Liste des groupes ----
   return (
     <div
       style={{
@@ -167,9 +177,7 @@ const GroupesPage = () => {
             padding: "0.7rem",
             border: "none",
             cursor: "pointer",
-            boxShadow: "0 2px 8px rgba(255,152,0,0.08)",
             fontSize: "1.3rem",
-            transition: "background 0.2s"
           }}
           onClick={fetchGroups}
           disabled={loading}
@@ -178,31 +186,30 @@ const GroupesPage = () => {
           <FaSyncAlt />
         </button>
       </div>
+
       <div style={{ overflowX: "auto" }}>
         <table style={{
           width: '100%',
           borderCollapse: 'collapse',
           background: "#fff",
           borderRadius: 16,
-          boxShadow: "0 2px 8px rgba(255,152,0,0.07)",
           overflow: "hidden"
         }}>
           <thead>
             <tr style={{ background: "linear-gradient(90deg,#ff9800,#ffc107)", color: "#fff" }}>
-              <th style={{ padding: "1rem", fontWeight: 600 }}>Nom du groupe</th>
-              <th style={{ padding: "1rem", fontWeight: 600 }}>Membres & rôles</th>
-              <th style={{ padding: "1rem", fontWeight: 600 }}>Chat</th>
+              <th style={{ padding: "1rem" }}>Nom du groupe</th>
+              <th style={{ padding: "1rem" }}>Membres & rôles</th>
+              <th style={{ padding: "1rem" }}>Chat</th>
             </tr>
           </thead>
           <tbody>
             {groups.map((group) => {
-              // Vérifie si l'utilisateur courant (admin) est membre du groupe
               const adminUsername = keycloak?.tokenParsed?.preferred_username;
               const isAdminInGroup = group.membres.some(
                 (m: any) => m.username === adminUsername
               );
               return (
-                <tr key={group.id} style={{ borderBottom: "1px solid #ffe0b2", transition: "background 0.2s" }}>
+                <tr key={group.id}>
                   <td style={{ padding: "0.9rem" }}>{group.name}</td>
                   <td style={{ padding: "0.9rem" }}>
                     {group.membres.length === 0 ? (
@@ -210,18 +217,15 @@ const GroupesPage = () => {
                     ) : (
                       <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
                         {group.membres.map(m => (
-                          <li key={m.id} style={{ marginBottom: 4 }}>
-                            <span style={{ fontWeight: 600 }}>{m.username}</span>
+                          <li key={m.id}>
+                            <strong>{m.username}</strong>
                             <span style={{ color: "#888", marginLeft: 8 }}>{m.email}</span>
                             <span style={{
-                              background: "#fff",
-                              color: "#232323",
+                              border: "1px solid #232323",
                               borderRadius: 10,
                               padding: "1px 7px",
                               marginLeft: 12,
                               fontSize: "0.82em",
-                              fontWeight: 500,
-                              border: "1px solid #232323"
                             }}>
                               {m.role}
                             </span>
@@ -254,11 +258,11 @@ const GroupesPage = () => {
           </tbody>
         </table>
       </div>
-      {/* Loader luxe orange */}
+
       {loading && (
         <div style={{ textAlign: "center", marginTop: "1.5rem" }}>
           <div style={{
-            margin: "0 auto 1rem auto",
+            margin: "0 auto",
             width: 36,
             height: 36,
             border: "4px solid #ffe0b2",

@@ -4,4 +4,5 @@ export type Member = {
   email?: string;
   name?: string;
   role?: string;
+  keycloak_id?: string; // Ajoute ce champ
 };

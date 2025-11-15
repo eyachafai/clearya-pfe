@@ -1,6 +1,7 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'; // Import des éléments nécessaires
-import Home from './components/Home'; 
-import Profile from './components/Profile'; 
+import keycloak from "./config/keycloak";
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'; // Ajoute Navigate
+import Home from './components/Home';
+import Profile from './components/Profile';
 import EditProfile from "./components/EditProfile";
 import AdminPage from './components/admin/AdminPage';
 import PrincipalPage from './components/admin/PrincipalPage';
@@ -14,6 +15,8 @@ import UtilisateursPage from './components/admin/UtilisateursPage';
 import MesGroupesChatPage from './components/chat/MesGroupesChatPage';
 import GestionProjet from './components/projet/gestion-projet';
 import Projet from './components/projet/projet';
+import TicketPage from './components/projet/ticket';
+import TicketPageAdmin from './components/admin/ticketPageAdmin';
 
 import { useKeycloak } from "@react-keycloak/web";
 import { setToken } from "./services/authService";
@@ -22,6 +25,23 @@ import { useEffect, useState } from 'react';
 const AppLayout = ({ children }: { children: React.ReactNode }) => {
   // Ajoute un badge "vu" si des messages non lus existent (exemple simple)
   const [hasUnread, setHasUnread] = useState(false);
+
+
+  useEffect(() => {
+    if (keycloak?.token) {
+      console.log("✅ Token Keycloak détecté :", keycloak.token);
+      localStorage.setItem("keycloak_token", keycloak.token);
+
+      if (keycloak.tokenParsed?.sub) {
+        localStorage.setItem("utilisateur_keycloak_id", keycloak.tokenParsed.sub);
+        console.log("✅ ID Keycloak sauvegardé :", keycloak.tokenParsed.sub);
+      }
+    } else {
+      console.log("⚠️ Aucun token Keycloak pour l’instant");
+    }
+  }, [keycloak?.token]);
+
+
 
   useEffect(() => {
     // Vérifie dans le localStorage ou via API si des messages non lus existent
@@ -82,13 +102,29 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+const TicketPageWrapper = () => {
+  const { keycloak } = useKeycloak();
+  const user = keycloak.tokenParsed;
+  // Récupère les membres et le groupe depuis localStorage ou API si besoin
+  // Exemple simple :
+  const members = JSON.parse(localStorage.getItem("members") || "[]");
+  const currentUserId = user?.id || user?.sub ? members.find((m: any) => m.keycloak_id === (user?.id || user?.sub))?.id : null;
+
+  return (
+    <TicketPage
+      currentUserId={currentUserId}
+      allMembers={members}
+    />
+  );
+};
+
 const App = () => {
- const { keycloak, initialized } = useKeycloak();
+  const { keycloak, initialized } = useKeycloak();
 
   useEffect(() => {
     if (initialized && keycloak?.authenticated && keycloak?.token) {
       setToken(keycloak.token);
-  //    console.log("✅ Token sauvegardé :", keycloak.token);
+      //    console.log("✅ Token sauvegardé :", keycloak.token);
     }
   }, [initialized, keycloak]);
 
@@ -99,19 +135,22 @@ const App = () => {
           {/* Définition des routes */}
           <Route path="/" element={<Home />} />
           <Route path="/profile" element={<Profile />} />
-          <Route path="/edit-profile" element={<EditProfile />} /> 
-          <Route path="/admin" element={<AdminPage />} /> 
+          <Route path="/edit-profile" element={<EditProfile />} />
+          <Route path="/admin" element={<AdminPage />} />
           <Route path="/principal" element={<PrincipalPage />} />
           <Route path="/journal-connexion" element={<JournalConnexionPage />} />
           <Route path="/groupes" element={<GroupesPage />} />
           <Route path="/add-group" element={<AjouterGroupe />} />
           <Route path="/edit-group/" element={<ModifierGroupe />} />
-          <Route path="/chat"element={<ChatPage />}/>
+          <Route path="/chat" element={<ChatPage />} />
           <Route path="/gestion-utilisateurs" element={<GestionUtilisateursPage />} />
           <Route path="/utilisateurs" element={<UtilisateursPage />} />
           <Route path="/mes-groupes-chat" element={<MesGroupesChatPage />} />
           <Route path="/gestion-projet" element={<GestionProjet />} />
           <Route path="/projet/:id" element={<Projet />} />
+          <Route path="/tickets" element={<TicketPageWrapper />} />
+          <Route path="/admintickets" element={<TicketPageAdmin />} />
+
         </Routes>
       </AppLayout>
     </Router>

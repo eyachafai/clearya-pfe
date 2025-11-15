@@ -17,6 +17,7 @@ const pool = require('./src/config/db');
 const testKeycloakRoutes = require('./src/routes/testkeycloak');
 const messagesRoutes = require('./src/routes/messages.routes');
 const projetRoutes = require('./src/routes/projet.routes');
+const ticketRoutres = require('./src/routes/ticket.routes');
 
 const app = express();
 // ➤ Sessions + Keycloak   /// il faut avant le middleware

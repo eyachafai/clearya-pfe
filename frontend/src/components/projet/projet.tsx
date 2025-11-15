@@ -25,15 +25,21 @@ const Projet = () => {
   const [editDesc, setEditDesc] = useState("");
   const [editMembre, setEditMembre] = useState<number | "">("");
 
-  // Redirige si pas de projet (ex: refresh direct sur l'URL)
+  const etatOptions = ["a faire", "en cours", "terminee"];
+
+  const [etatSelectTacheId, setEtatSelectTacheId] = useState<number | null>(null);
+
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+
+
   useEffect(() => {
+
+    // Redirige si pas de projet (ex: refresh direct sur l'URL)
     if (!projet) {
       navigate("/projets");
     }
-  }, [projet, navigate]);
 
-  // Récupère les membres du projet
-  useEffect(() => {
+    // Récupère les membres du projet
     async function fetchProjetMembers() {
       if (!projet) return;
       try {
@@ -48,10 +54,8 @@ const Projet = () => {
       }
     }
     fetchProjetMembers();
-  }, [projet]);
 
-  // Récupère les taches du projet
-  useEffect(() => {
+    // Récupère les taches du projet
     async function fetchTaches() {
       if (!projet) return;
       try {
@@ -66,7 +70,36 @@ const Projet = () => {
       }
     }
     fetchTaches();
-  }, [projet]);
+
+    // Charger la liste des états depuis le backend
+    async function fetchEtats() {
+      try {
+        const res = await fetch("/api/taches/etats");
+        //  console.log('res ', res)
+        if (res.ok) {
+          //    setEtatOptions(await res.json());
+        } else {
+          //     setEtatOptions(["à faire", "en cours", "terminée"]);
+        }
+      } catch {
+        //  setEtatOptions(["à faire", "en cours", "terminée"]);
+      }
+    }
+    fetchEtats();
+
+    // Récupère le keycloak_id (sub) du user connecté
+    let keycloakId = localStorage.getItem("keycloak_id") || localStorage.getItem("sub");
+    // Mappe sur les membres du projet pour trouver l'id interne
+    const membre = projetMembers.find((m: any) => m.keycloak_id === keycloakId);
+    if (membre) {
+      setCurrentUserId(membre.id); // id interne de la BD
+    } else {
+      setCurrentUserId(null);
+    }
+
+  }, [projet, navigate, projetMembers]);
+
+
 
   // Vérifie si user est manager (optionnel, à adapter selon ton besoin)
   // const isManager = ...;
@@ -97,48 +130,34 @@ const Projet = () => {
 
   // Ajoute la gestion du changement d'état d'une tâche
   const handleEtatChange = async (tacheId: number, newEtat: string) => {
-    await fetch(`/api/projet/${projet.id}/taches/${tacheId}`, {
-      method: "PUT",
+    // Utilise la nouvelle route PATCH et passe l'utilisateur connecté
+    const r = await fetch(`/api/projet/${projet.id}/taches/${tacheId}/etat`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ etat: newEtat }),
+      body: JSON.stringify({ etat: newEtat, utilisateur_id: currentUserId }),
     });
-    // Refresh
-    const res = await fetch(`/api/projet/${projet.id}/taches`);
-    setTaches(res.ok ? await res.json() : []);
+    if (r.ok) {
+      const updated = await r.json();
+      setTaches(prev => prev.map(x => x.id === tacheId ? updated : x));
+    } else {
+      const err = await r.json().catch(() => ({}));
+      alert(err?.error || "Erreur changement état");
+    }
   };
 
-  // Juste avant le return du composant Projet :
-  const getCurrentUserId = () => {
-    // Récupère le keycloak_id de l'utilisateur connecté
-    let keycloakId = localStorage.getItem("keycloak_id") || localStorage.getItem("sub");
-    if (!keycloakId && group && group.utilisateur && group.utilisateur.keycloak_id) {
-      keycloakId = group.utilisateur.keycloak_id;
-      console.log("Récupéré depuis group.utilisateur.keycloak_id :", keycloakId);
-    }
-    // Cherche le membre correspondant dans projetMembers par keycloak_id
-    if (keycloakId) {
-      // Affiche les membres pour debug
-      console.log("projetMembers (pour debug):", projetMembers);
-      const membre = projetMembers.find(m => (m as any).keycloak_id === keycloakId);
-      if (membre) {
-        console.log("Membre trouvé par keycloak_id:", membre);
-        return membre.id;
-      }
-      console.log("Aucun membre trouvé avec ce keycloak_id:", keycloakId);
-    }
+  // DEBUG: force la présence du keycloak_id dans le localStorage si tu connais la valeur
+  if (!localStorage.getItem("keycloak_id") && projetMembers.length > 0) {
+    // Prend le keycloak_id du premier membre pour debug (à adapter selon ton besoin)
+    localStorage.setItem("keycloak_id", (projetMembers[0] as any).keycloak_id || "");
+    console.log("DEBUG: keycloak_id ajouté au localStorage:", (projetMembers[0] as any).keycloak_id);
+  }
 
-    // fallback : si tu passes le user dans le state (ex: group.utilisateur_id ou group.utilisateur?.id)
-    if (group && group.utilisateur_id) return Number(group.utilisateur_id);
-    if (group && group.utilisateur && group.utilisateur.id) return Number(group.utilisateur.id);
+  const isCurrentUserTacheOwner = (t: Tache) => {
+    console.log('currentUserId ', currentUserId)
+    console.log('membre_id ', t.membre_id)
 
-    // fallback : id numérique dans le localStorage
-    const storedId = localStorage.getItem("user_id");
-    console.log("Récupéré depuis localStorage user_id :", storedId);
-    if (storedId && !isNaN(Number(storedId))) return Number(storedId);
-
-    return null;
+    return currentUserId !== null && Number(t.membre_id) === Number(currentUserId);
   };
-  const currentUserId = getCurrentUserId();
 
   return (
     <div className="dashboard-wrapper" style={{ background: "#f5f6fa", minHeight: "100vh" }}>
@@ -296,183 +315,215 @@ const Projet = () => {
                   {taches.length === 0 ? (
                     <li>Aucune tâche pour ce projet.</li>
                   ) : (
-                    taches.map(t => (
-                      <li key={t.id} style={{
-                        background: "#f5f6fa",
-                        borderRadius: "8px",
-                        padding: "12px 18px",
-                        marginBottom: "10px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        fontWeight: "bold",
-                        color: "#222"
-                      }}>
-                        <span>
-                          <span style={{
-                            background: "#eee",
-                            color: "#333",
-                            borderRadius: "6px",
-                            padding: "2px 10px",
-                            fontWeight: "bold",
-                            fontSize: "0.95rem",
-                            marginRight: "10px"
-                          }}>
-                            {t.etat || "nouveau"}
-                          </span>
-                          {editTacheId === t.id ? (
-                            <>
-                              <input
-                                type="text"
-                                value={editTitre}
-                                onChange={e => setEditTitre(e.target.value)}
-                                style={{ marginRight: 8 }}
-                              />
-                              <input
-                                type="text"
-                                value={editDesc}
-                                onChange={e => setEditDesc(e.target.value)}
-                                style={{ marginRight: 8 }}
-                              />
+                    taches.map(t => {
+                      const canUpdate = isCurrentUserTacheOwner(t);
+                      return (
+                        <li key={t.id} style={{
+                          background: canUpdate ? "#e0ffe0" : "#f5f6fa",
+                          borderRadius: "8px",
+                          padding: "12px 18px",
+                          marginBottom: "10px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          fontWeight: "bold",
+                          color: "#222"
+                        }}>
+                          <span>
+                            {/* Affiche le badge ou le select selon l'état */}
+                            {canUpdate ? (
                               <select
-                                value={editMembre}
-                                onChange={e => setEditMembre(Number(e.target.value))}
-                                style={{ marginRight: 8 }}
+                                value={t.etat || "à faire"}
+                                onChange={async e => {
+                                  await handleEtatChange(t.id, e.target.value);
+                                  setEtatSelectTacheId(null);
+                                }}
+                                onBlur={() => setEtatSelectTacheId(null)}
+                                autoFocus
+                                style={{
+                                  borderRadius: "6px",
+                                  padding: "2px 8px",
+                                  border: "1px solid #bbb",
+                                  fontWeight: "bold",
+                                  marginRight: "10px"
+                                }}
                               >
-                                <option value="">Affecter à...</option>
-                                {projetMembers.map((m: Member) => (
-                                  <option key={m.id} value={m.id}>
-                                    {m.username} {m.name && `(${m.name})`}
+                                {etatOptions.map(etat => (
+                                  <option key={etat} value={etat}>
+                                    {etat.charAt(0).toUpperCase() + etat.slice(1)}
                                   </option>
                                 ))}
                               </select>
-                            </>
-                          ) : (
-                            <>
-                              {t.titre} — {t.description} <br />
-                              <span style={{ fontWeight: "normal", fontSize: "1rem" }}>
-                                Affectée à : {t.membre?.username || "?"}
+                            ) : (
+                              <span
+                                style={{
+                                  background: "#eee",
+                                  color: "#333",
+                                  borderRadius: "6px",
+                                  padding: "2px 10px",
+                                  fontWeight: "bold",
+                                  fontSize: "0.95rem",
+                                  marginRight: "10px",
+                                  cursor: canUpdate ? "pointer" : "default",
+                                  border: canUpdate ? "1px solid #bbb" : "none"
+                                }}
+                                onClick={() => {
+                                  if (canUpdate) setEtatSelectTacheId(t.id);
+                                }}
+                                title={canUpdate ? "Changer l'état" : ""}
+                              >
+                                {t.etat || "à faire"}
                               </span>
-                            </>
-                          )}
-                        </span>
-                        <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          {/* Seul le user connecté qui a la tâche peut modifier l'état */}
-                          {currentUserId !== null && Number(t.membre_id) === Number(currentUserId) && (
-                            <select
-                              value={t.etat || "nouveau"}
-                              onChange={e => handleEtatChange(t.id, e.target.value)}
-                              style={{
+                            )}
+                            {editTacheId === t.id ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={editTitre}
+                                  onChange={e => setEditTitre(e.target.value)}
+                                  style={{ marginRight: 8 }}
+                                />
+                                <input
+                                  type="text"
+                                  value={editDesc}
+                                  onChange={e => setEditDesc(e.target.value)}
+                                  style={{ marginRight: 8 }}
+                                />
+                                <select
+                                  value={editMembre}
+                                  onChange={e => setEditMembre(Number(e.target.value))}
+                                  style={{ marginRight: 8 }}
+                                >
+                                  <option value="">Affecter à...</option>
+                                  {projetMembers.map((m: Member) => (
+                                    <option key={m.id} value={m.id}>
+                                      {m.username} {m.name && `(${m.name})`}
+                                    </option>
+                                  ))}
+                                </select>
+                              </>
+                            ) : (
+                              <>
+                                {t.titre} — {t.description} <br />
+                                <span style={{ fontWeight: "normal", fontSize: "1rem" }}>
+                                  Affectée à : {t.membre?.username || "?"}
+                                </span>
+                              </>
+                            )}
+                            {isCurrentUserTacheOwner(t) && (
+                              <span style={{
+                                background: "#198754",
+                                color: "#fff",
                                 borderRadius: "6px",
                                 padding: "2px 8px",
-                                border: "1px solid #bbb",
-                                fontWeight: "bold"
-                              }}
-                            >
-                              <option value="nouveau">Nouveau</option>
-                              <option value="en cours">En cours</option>
-                              <option value="resolu">Résolu</option>
-                              <option value="fermee">Fermée</option>
-                            </select>
-                          )}
-                          {isManager && (
-                            <span>
-                              {editTacheId === t.id ? (
-                                <>
-                                  <button
-                                    onClick={async () => {
-                                      await fetch(`/api/projet/${projet.id}/taches/${t.id}`, {
-                                        method: "PUT",
-                                        headers: { "Content-Type": "application/json" },
-                                        body: JSON.stringify({
-                                          titre: editTitre,
-                                          description: editDesc,
-                                          membre_id: editMembre
-                                        }),
-                                      });
-                                      setEditTacheId(null);
-                                      const res = await fetch(`/api/projet/${projet.id}/taches`);
-                                      setTaches(res.ok ? await res.json() : []);
-                                    }}
-                                    style={{
-                                      background: "#198754",
-                                      color: "#fff",
-                                      border: "none",
-                                      padding: "4px 12px",
-                                      borderRadius: "6px",
-                                      fontWeight: "bold",
-                                      cursor: "pointer",
-                                      marginRight: "8px"
-                                    }}
-                                  >
-                                    Enregistrer
-                                  </button>
-                                  <button
-                                    onClick={() => setEditTacheId(null)}
-                                    style={{
-                                      background: "#dc3545",
-                                      color: "#fff",
-                                      border: "none",
-                                      padding: "4px 12px",
-                                      borderRadius: "6px",
-                                      fontWeight: "bold",
-                                      cursor: "pointer"
-                                    }}
-                                  >
-                                    Annuler
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={() => {
-                                      setEditTacheId(t.id);
-                                      setEditTitre(t.titre);
-                                      setEditDesc(t.description || "");
-                                      setEditMembre(t.membre_id);
-                                    }}
-                                    style={{
-                                      background: "#ffc107",
-                                      color: "#222",
-                                      border: "none",
-                                      padding: "4px 12px",
-                                      borderRadius: "6px",
-                                      fontWeight: "bold",
-                                      cursor: "pointer",
-                                      marginRight: "8px"
-                                    }}
-                                  >
-                                    Modifier
-                                  </button>
-                                  <button
-                                    onClick={async () => {
-                                      // Suppression côté serveur
-                                      await fetch(`/api/projet/${projet.id}/taches/${t.id}`, {
-                                        method: "DELETE"
-                                      });
-                                      // Recharge la liste depuis la BD pour être sûr que c'est bien supprimé côté backend
-                                      const res = await fetch(`/api/projet/${projet.id}/taches`);
-                                      setTaches(res.ok ? await res.json() : []);
-                                    }}
-                                    style={{
-                                      background: "#dc3545",
-                                      color: "#fff",
-                                      border: "none",
-                                      padding: "4px 12px",
-                                      borderRadius: "6px",
-                                      fontWeight: "bold",
-                                      cursor: "pointer"
-                                    }}
-                                  >
-                                    Supprimer
-                                  </button>
-                                </>
-                              )}
-                            </span>
-                          )}
-                        </span>
-                      </li>
-                    ))
+                                fontWeight: "bold",
+                                marginLeft: "8px",
+                                fontSize: "0.9rem"
+                              }}>
+                                Ma tâche
+                              </span>
+                            )}
+                          </span>
+                          <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            {isManager && (
+                              <span>
+                                {editTacheId === t.id ? (
+                                  <>
+                                    <button
+                                      onClick={async () => {
+                                        await fetch(`/api/projet/${projet.id}/taches/${t.id}`, {
+                                          method: "PUT",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({
+                                            titre: editTitre,
+                                            description: editDesc,
+                                            membre_id: editMembre
+                                          }),
+                                        });
+                                        setEditTacheId(null);
+                                        const res = await fetch(`/api/projet/${projet.id}/taches`);
+                                        setTaches(res.ok ? await res.json() : []);
+                                      }}
+                                      style={{
+                                        background: "#198754",
+                                        color: "#fff",
+                                        border: "none",
+                                        padding: "4px 12px",
+                                        borderRadius: "6px",
+                                        fontWeight: "bold",
+                                        cursor: "pointer",
+                                        marginRight: "8px"
+                                      }}
+                                    >
+                                      Enregistrer
+                                    </button>
+                                    <button
+                                      onClick={() => setEditTacheId(null)}
+                                      style={{
+                                        background: "#dc3545",
+                                        color: "#fff",
+                                        border: "none",
+                                        padding: "4px 12px",
+                                        borderRadius: "6px",
+                                        fontWeight: "bold",
+                                        cursor: "pointer"
+                                      }}
+                                    >
+                                      Annuler
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        setEditTacheId(t.id);
+                                        setEditTitre(t.titre);
+                                        setEditDesc(t.description || "");
+                                        setEditMembre(t.membre_id);
+                                      }}
+                                      style={{
+                                        background: "#ffc107",
+                                        color: "#222",
+                                        border: "none",
+                                        padding: "4px 12px",
+                                        borderRadius: "6px",
+                                        fontWeight: "bold",
+                                        cursor: "pointer",
+                                        marginRight: "8px"
+                                      }}
+                                    >
+                                      Modifier
+                                    </button>
+                                    <button
+                                      onClick={async () => {
+                                        // Suppression côté serveur
+                                        await fetch(`/api/projet/${projet.id}/taches/${t.id}`, {
+                                          method: "DELETE"
+                                        });
+                                        // Recharge la liste depuis la BD pour être sûr que c'est bien supprimé côté backend
+                                        const res = await fetch(`/api/projet/${projet.id}/taches`);
+                                        setTaches(res.ok ? await res.json() : []);
+                                      }}
+                                      style={{
+                                        background: "#dc3545",
+                                        color: "#fff",
+                                        border: "none",
+                                        padding: "4px 12px",
+                                        borderRadius: "6px",
+                                        fontWeight: "bold",
+                                        cursor: "pointer"
+                                      }}
+                                    >
+                                      Supprimer
+                                    </button>
+                                  </>
+                                )}
+                              </span>
+                            )}
+                          </span>
+                        </li>
+                      );
+                    })
                   )}
                 </ul>
                 <button
@@ -778,5 +829,6 @@ const Projet = () => {
     </div>
   );
 };
+
 
 export default Projet;

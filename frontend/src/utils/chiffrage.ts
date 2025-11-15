@@ -34,3 +34,21 @@ export function encryptAESKeyWithRSA(aesKeyHex: string, recipientPublicKeyPem: s
   );
   return forge.util.encode64(encrypted);
 }
+
+// ✅ Decrypt AES key with RSA
+export function decryptAESKeyWithRSA(encryptedAESKey: string, privateKey: string): string {
+  // Use window.crypto.subtle or a library like node-forge/jsrsasign for RSA decryption in browser
+  // For demo, pseudo-code:
+  // return rsaDecrypt(encryptedAESKey, privateKey);
+  // ...implement with your crypto lib...
+  return ""; // TODO: implement
+}
+
+// ✅ Decrypt with AES using the generated key
+export function decryptWithAES(ciphertext: string, key: string, iv: string): string {
+  // Use window.crypto.subtle or a library like crypto-js for AES decryption
+  // For demo, pseudo-code:
+  // return aesDecrypt(ciphertext, key, iv);
+  // ...implement with your crypto lib...
+  return ""; // TODO: implement
+}

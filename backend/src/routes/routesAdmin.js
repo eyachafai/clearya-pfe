@@ -2,14 +2,14 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const { keycloak } = require('../config/keycloak.config');
-const { Utilisateur } = require('../models/index'); 
+const { Utilisateur } = require('../models/index');
 const { Departement } = require("../models");
 const { Groupe } = require("../models");
 const { GroupeUtilisateur } = require("../models");
 require('dotenv').config();
 
 const ADMIN_USERNAME = process.env.KEYCLOAK_ADMIN;
-const ADMIN_PASSWORD = process.env.KEYCLOAK_PASSWORD; 
+const ADMIN_PASSWORD = process.env.KEYCLOAK_PASSWORD;
 const CLIENT_ID = 'admin-cli'
 
 const KEYCLOAK_BASE_URL = process.env.KEYCLOAK_SERVER_URL || "http://localhost:8080";

@@ -2,10 +2,7 @@ const { DataTypes } = require('sequelize');
 const sequelize = require('../config/db');
 const Utilisateur = require('./Utilisateur');
 
-// Supprime le type ENUM Sequelize (pour éviter les conflits avec PostgreSQL)
-sequelize.query('DROP TYPE IF EXISTS "enum_tache_etat";');
-
-const Tache = sequelize.define('Tache', {
+const Ticket = sequelize.define('Ticket', {
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
@@ -19,15 +16,7 @@ const Tache = sequelize.define('Tache', {
     type: DataTypes.TEXT,
     allowNull: true
   },
-  projet_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'projet',
-      key: 'id'
-    }
-  },
-  membre_id: {
+  assignee_id: {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
@@ -36,18 +25,31 @@ const Tache = sequelize.define('Tache', {
     }
   },
   etat: {
-    type: DataTypes.ENUM("a faire", "en cours", "terminee"),
+    type: DataTypes.ENUM("nouveau", "en cours", "resolu", "ferme"),
     allowNull: false,
-    defaultValue: "a faire"
+    defaultValue: "nouveau"
+  },
+  created_by: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
+  resolved_at: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 }, {
-  tableName: 'tache',
+  tableName: 'ticket',
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: 'updated_at'
 });
 
-// Pour include membre dans les requêtes
-Tache.belongsTo(Utilisateur, { foreignKey: 'membre_id', as: 'membre' });
+// Associations pour include
+Ticket.belongsTo(Utilisateur, { foreignKey: 'assignee_id', as: 'assignee' });
+Ticket.belongsTo(Utilisateur, { foreignKey: 'created_by', as: 'creator' });
 
-module.exports = Tache;
+module.exports = Ticket;

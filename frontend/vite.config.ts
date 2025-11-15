@@ -8,8 +8,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': process.env.VITE_API_URL || "http://localhost:5000",
-      '/auth': process.env.VITE_AUTH_URL || "http://localhost:8080"
+      '/api': 'http://localhost:5000',
+      '/auth': 'http://localhost:8080'
     }
   }
 });

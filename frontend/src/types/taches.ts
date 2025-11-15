@@ -6,5 +6,5 @@ export type Tache = {
   description: string;
   membre_id: number;
   membre?: Member;
-  etat?: string;
+  etat?: string; 
 };

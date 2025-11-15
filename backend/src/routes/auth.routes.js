@@ -4,12 +4,15 @@ const axios = require('axios');
 const pool = require('../config/db');
 require('dotenv').config({ path: '../.env' });
 const { keycloak } = require('../config/keycloak.config');
-const { Utilisateur } = require('../models/index'); 
+const { Utilisateur } = require('../models/index');
+const Groupe = require('../models/Groupe');
+const GroupeUtilisateur = require('../models/GroupeUtilisateur');
+
 
 const REALM_NAME = 'myrealm';
 const KEYCLOAK_BASE_URL = process.env.KEYCLOAK_SERVER_URL;
 const ADMIN_USERNAME = process.env.KEYCLOAK_ADMIN;
-const ADMIN_PASSWORD = process.env.KEYCLOAK_PASSWORD; // Remplace KEYCLOAK_ADMIN_PASSWORD par KEYCLOAK_PASSWORD
+const ADMIN_PASSWORD = process.env.KEYCLOAK_PASSWORD;
 const CLIENT_ID = 'admin-cli'
 
 router.get('/me', async (req, res) => {
@@ -92,7 +95,7 @@ router.put('/profile', keycloak.protect(), async (req, res) => {
       }
     );
 
-    return res.status(200).json({ message: 'Profil mis à jour avec succès', status: 200});
+    return res.status(200).json({ message: 'Profil mis à jour avec succès', status: 200 });
 
   } catch (err) {
     console.error('❌ Erreur mise à jour profil:', err.response?.data || err.message);
@@ -211,6 +214,77 @@ router.delete("/delete-keycloak-local/:keycloak_id", async (req, res) => {
   }
 });
 
+router.get("/groupes-utilisateur/:keycloakId", async (req, res) => {
+  const { keycloakId } = req.params;
 
+  try {
+    console.log("🔹 Requête reçue avec keycloakId :", keycloakId);
+
+    // Vérification de la valeur de keycloakId
+    if (!keycloakId || typeof keycloakId !== "string") {
+      console.warn("⚠️ keycloakId est invalide ou manquant :", keycloakId);
+      return res.status(400).json({ error: "keycloakId invalide ou manquant" });
+    }
+
+    console.log("🔹 Recherche de utilisateur_id à partir de keycloak_id...");
+
+    // Récupérer utilisateur_id à partir de keycloak_id
+    const utilisateur = await Utilisateur.findOne({
+      where: { keycloak_id: keycloakId },
+    });
+
+    if (!utilisateur) {
+      console.warn("⚠️ Utilisateur non trouvé pour keycloakId :", keycloakId);
+      return res.status(404).json({ error: "Utilisateur non trouvé" });
+    }
+
+    const utilisateurId = utilisateur.id; // ID interne (integer)
+    console.log("🔹 utilisateurId récupéré :", utilisateurId);
+
+    // Récupérer les groupes via la table pivot
+    const groupes = await GroupeUtilisateur.findAll({
+      where: { utilisateur_id: utilisateurId },
+      include: [{ model: Groupe, attributes: ["id", "name"] }],
+    });
+    console.log("🔹 Groupes récupérés :", groupes);
+
+    const result = groupes.map((g) => ({
+      id: g.Groupe.id,
+      name: g.Groupe.name,
+      role: g.role,
+    }));
+
+    console.log("🔹 Résultat final envoyé au frontend :", result);
+
+    res.json(result);
+  } catch (err) {
+    console.error("❌ Erreur récupération groupes utilisateur :", err);
+    res.status(500).json({
+      error: "Erreur récupération groupes utilisateur",
+      details: err.message,
+    });
+  }
+});
+
+router.get("/users/:id", async (req, res) => {
+  console.log('🔹 GET /users/:id called');
+  const userId = req.params.id;
+  console.log(`🔹 Request received for user ID: ${userId}`);
+
+  try {
+    const user = await Utilisateur.findByPk(userId);
+    if (!user) {
+      console.warn(`⚠️ User not found for ID: ${userId}`);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    console.log(`🟢 User found:`, user);
+    res.json(user);
+
+  } catch (error) {
+    console.error('❌ Error fetching user:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 module.exports = router;

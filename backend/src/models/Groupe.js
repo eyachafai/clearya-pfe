@@ -27,4 +27,7 @@ const Groupe = sequelize.define("Groupe", {
   timestamps: false
 });
 
+
 module.exports = Groupe;
+
+

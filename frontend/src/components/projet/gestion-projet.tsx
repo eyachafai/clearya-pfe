@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import "./gestion-projet.css";
 import { useKeycloak } from "@react-keycloak/web";
 import { useNavigate } from "react-router-dom";
-import { FaTrash } from "react-icons/fa"; // Ajoute cette ligne en haut
+import { FaTrash } from "react-icons/fa";
+import TicketPage from "./ticket"; // Correction du chemin et nom
 
 const GestionProjet = () => {
   const { keycloak } = useKeycloak();
@@ -14,6 +15,7 @@ const GestionProjet = () => {
   const [newProjectName, setNewProjectName] = useState("");
   const [loading, setLoading] = useState(true);
   const [deleteProjectId, setDeleteProjectId] = useState<number | null>(null);
+  const [showTickets, setShowTickets] = useState(false);
   const navigate = useNavigate();
 
   // Récupère le groupe principal de l'utilisateur (hors "employee")
@@ -90,9 +92,6 @@ const GestionProjet = () => {
     if (user?.id || user?.sub) fetchGroupAndData();
   }, [user?.id, user?.sub]);
 
-  // Check if user is manager dans ce groupe
-  const isManager = group?.role === "manager";
-
   // Handle project creation
   const handleCreateProject = async () => {
     if (!newProjectName.trim() || !group) return;
@@ -162,7 +161,12 @@ const GestionProjet = () => {
               padding: "12px 20px",
               fontWeight: "bold"
             }}>Projets</li>
-            <li style={{ margin: "8px 16px", padding: "12px 20px", borderRadius: "8px", cursor: "pointer" }}>Tickets</li>
+            <li
+              style={{ margin: "8px 16px", padding: "12px 20px", borderRadius: "8px", cursor: "pointer" }}
+              onClick={() => setShowTickets(true)}
+            >
+              Tickets
+            </li>
             <li style={{ margin: "8px 16px", padding: "12px 20px", borderRadius: "8px", cursor: "pointer" }}>Partage Fichiers</li>
             <li style={{ margin: "8px 16px", padding: "12px 20px", borderRadius: "8px", cursor: "pointer" }}>Équipes</li>
           </ul>
@@ -199,291 +203,318 @@ const GestionProjet = () => {
           </div>
         </header>
         <section className="dashboard-content" style={{ display: "flex", gap: "32px" }}>
-          <div className="projects-section" style={{
-            flex: 2,
-            background: "#fff",
-            borderRadius: "16px",
-            boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
-            padding: "32px",
-            minHeight: "340px"
-          }}>
-            <div className="section-header" style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: "24px"
-            }}>
-              <h3 style={{ fontWeight: "bold", fontSize: "1.2rem", color: "#222" }}>Projets du groupe</h3>
-              {group?.role &&
-                group.role.toLowerCase().includes("manager") && (
-                  <button
-                    onClick={() => setShowCreate(true)}
-                    className="btn-create"
-                    style={{
-                      background: "#222",
-                      color: "#fff",
-                      border: "none",
-                      padding: "8px 16px",
-                      borderRadius: "8px",
-                      fontWeight: "bold",
-                      cursor: "pointer",
-                      fontSize: "1rem"
-                    }}
-                  >
-                    + Créer un projet
-                  </button>
-                )
-              }
-            </div>
-            {/* Modal centré pour création projet */}
-            {showCreate && (
-              <div
-                className="modal-overlay"
+          {showTickets ? (
+            <div style={{ flex: 1, width: "100%" }}>
+              <TicketPage
+                currentUserId={user?.id || user?.sub ? members.find((m: any) => m.keycloak_id === (user?.id || user?.sub))?.id : null}
+                allMembers={members}
+                isManager={group?.role === "manager"}
+              />
+              <button
                 style={{
-                  position: "fixed",
-                  top: 0,
-                  left: 0,
-                  width: "100vw",
-                  height: "100vh",
-                  background: "rgba(0,0,0,0.3)",
+                  background: "#222",
+                  color: "#fff",
+                  border: "none",
+                  padding: "8px 16px",
+                  borderRadius: "6px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  marginTop: "16px"
+                }}
+                onClick={() => setShowTickets(false)}
+              >
+                Retour aux projets
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="projects-section" style={{
+                flex: 2,
+                background: "#fff",
+                borderRadius: "16px",
+                boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
+                padding: "32px",
+                minHeight: "340px"
+              }}>
+                <div className="section-header" style={{
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 1000
-                }}
-                onClick={() => setShowCreate(false)}
-              >
-                <div
-                  className="modal-content"
-                  style={{
-                    background: "#fff",
-                    padding: "32px",
-                    borderRadius: "12px",
-                    boxShadow: "0 2px 16px rgba(0,0,0,0.15)",
-                    minWidth: "350px",
-                    minHeight: "120px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "16px"
-                  }}
-                  onClick={e => e.stopPropagation()}
-                >
-                  <h4 style={{ margin: 0, fontWeight: "bold", color: "#222" }}>Créer un projet</h4>
-                  <input
-                    type="text"
-                    placeholder="Nom du projet"
-                    value={newProjectName}
-                    onChange={e => setNewProjectName(e.target.value)}
-                    style={{
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #ccc"
-                    }}
-                  />
-                  <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-                    <button
-                      onClick={handleCreateProject}
-                      style={{
-                        background: "#198754",
-                        color: "#fff",
-                        border: "none",
-                        padding: "8px 16px",
-                        borderRadius: "4px",
-                        fontWeight: "bold",
-                        cursor: "pointer"
-                      }}
-                    >
-                      Créer
-                    </button>
-                    <button
-                      onClick={() => setShowCreate(false)}
-                      style={{
-                        background: "#dc3545",
-                        color: "#fff",
-                        border: "none",
-                        padding: "8px 16px",
-                        borderRadius: "4px",
-                        fontWeight: "bold",
-                        cursor: "pointer"
-                      }}
-                    >
-                      Annuler
-                    </button>
-                  </div>
+                  justifyContent: "space-between",
+                  marginBottom: "24px"
+                }}>
+                  <h3 style={{ fontWeight: "bold", fontSize: "1.2rem", color: "#222" }}>Projets du groupe</h3>
+                  {group?.role &&
+                    group.role.toLowerCase().includes("manager") && (
+                      <button
+                        onClick={() => setShowCreate(true)}
+                        className="btn-create"
+                        style={{
+                          background: "#222",
+                          color: "#fff",
+                          border: "none",
+                          padding: "8px 16px",
+                          borderRadius: "8px",
+                          fontWeight: "bold",
+                          cursor: "pointer",
+                          fontSize: "1rem"
+                        }}
+                      >
+                        + Créer un projet
+                      </button>
+                    )
+                  }
                 </div>
-              </div>
-            )}
-            <ul className="projects-list" style={{ marginTop: "16px" }}>
-              {!group ? (
-                <li>Chargement...</li>
-              ) : loading ? (
-                <li>Chargement...</li>
-              ) : projects.length === 0 ? (
-                <li>Aucun projet dans ce groupe.</li>
-              ) : (
-                projects.map(proj => (
-                  <li
-                    key={proj.id}
-                    className="project-item"
+                {/* Modal centré pour création projet */}
+                {showCreate && (
+                  <div
+                    className="modal-overlay"
                     style={{
-                      background: "#222",
-                      color: "#fff",
-                      borderRadius: "8px",
-                      padding: "18px 24px",
-                      marginBottom: "12px",
-                      fontWeight: "bold",
-                      fontSize: "1.1rem",
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                      cursor: "pointer",
+                      position: "fixed",
+                      top: 0,
+                      left: 0,
+                      width: "100vw",
+                      height: "100vh",
+                      background: "rgba(0,0,0,0.3)",
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "space-between"
+                      justifyContent: "center",
+                      zIndex: 1000
                     }}
+                    onClick={() => setShowCreate(false)}
                   >
-                    <span onClick={() => handleProjectClick(proj)} style={{ flex: 1 }}>
-                      {proj.name}
-                    </span>
-                    {group?.role && group.role.toLowerCase().includes("manager") && (
-                      <button
-                        onClick={e => {
-                          e.stopPropagation();
-                          setDeleteProjectId(proj.id);
-                        }}
+                    <div
+                      className="modal-content"
+                      style={{
+                        background: "#fff",
+                        padding: "32px",
+                        borderRadius: "12px",
+                        boxShadow: "0 2px 16px rgba(0,0,0,0.15)",
+                        minWidth: "350px",
+                        minHeight: "120px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "16px"
+                      }}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <h4 style={{ margin: 0, fontWeight: "bold", color: "#222" }}>Créer un projet</h4>
+                      <input
+                        type="text"
+                        placeholder="Nom du projet"
+                        value={newProjectName}
+                        onChange={e => setNewProjectName(e.target.value)}
                         style={{
-                          background: "transparent",
-                          border: "none",
-                          marginLeft: "16px",
+                          padding: "8px",
+                          borderRadius: "4px",
+                          border: "1px solid #ccc"
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                        <button
+                          onClick={handleCreateProject}
+                          style={{
+                            background: "#198754",
+                            color: "#fff",
+                            border: "none",
+                            padding: "8px 16px",
+                            borderRadius: "4px",
+                            fontWeight: "bold",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Créer
+                        </button>
+                        <button
+                          onClick={() => setShowCreate(false)}
+                          style={{
+                            background: "#dc3545",
+                            color: "#fff",
+                            border: "none",
+                            padding: "8px 16px",
+                            borderRadius: "4px",
+                            fontWeight: "bold",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <ul className="projects-list" style={{ marginTop: "16px" }}>
+                  {!group ? (
+                    <li>Chargement...</li>
+                  ) : loading ? (
+                    <li>Chargement...</li>
+                  ) : projects.length === 0 ? (
+                    <li>Aucun projet dans ce groupe.</li>
+                  ) : (
+                    projects.map(proj => (
+                      <li
+                        key={proj.id}
+                        className="project-item"
+                        style={{
+                          background: "#222",
+                          color: "#fff",
+                          borderRadius: "8px",
+                          padding: "18px 24px",
+                          marginBottom: "12px",
+                          fontWeight: "bold",
+                          fontSize: "1.1rem",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
                           cursor: "pointer",
                           display: "flex",
-                          alignItems: "center"
+                          alignItems: "center",
+                          justifyContent: "space-between"
                         }}
-                        title="Supprimer le projet"
                       >
-                        <FaTrash color="#fff" size={18} />
-                      </button>
-                    )}
-                  </li>
-                ))
-              )}
-            </ul>
-            {/* Modal de confirmation suppression */}
-            {deleteProjectId !== null && (
-              <div
-                style={{
-                  position: "fixed",
-                  top: 0,
-                  left: 0,
-                  width: "100vw",
-                  height: "100vh",
-                  background: "rgba(0,0,0,0.3)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 1000
-                }}
-                onClick={() => setDeleteProjectId(null)}
-              >
-                <div
-                  style={{
-                    background: "#fff",
-                    padding: "32px",
-                    borderRadius: "12px",
-                    boxShadow: "0 2px 16px rgba(0,0,0,0.15)",
-                    minWidth: "350px",
-                    minHeight: "120px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "16px"
-                  }}
-                  onClick={e => e.stopPropagation()}
-                >
-                  <h4 style={{ margin: 0, fontWeight: "bold", color: "#222" }}>Confirmer la suppression</h4>
-                  <div>Voulez-vous vraiment supprimer ce projet ?</div>
-                  <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-                    <button
-                      onClick={() => handleDeleteProject(deleteProjectId)}
+                        <span onClick={() => handleProjectClick(proj)} style={{ flex: 1 }}>
+                          {proj.name}
+                        </span>
+                        {group?.role && group.role.toLowerCase().includes("manager") && (
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              setDeleteProjectId(proj.id);
+                            }}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              marginLeft: "16px",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center"
+                            }}
+                            title="Supprimer le projet"
+                          >
+                            <FaTrash color="#fff" size={18} />
+                          </button>
+                        )}
+                      </li>
+                    ))
+                  )}
+                </ul>
+                {/* Modal de confirmation suppression */}
+                {deleteProjectId !== null && (
+                  <div
+                    style={{
+                      position: "fixed",
+                      top: 0,
+                      left: 0,
+                      width: "100vw",
+                      height: "100vh",
+                      background: "rgba(0,0,0,0.3)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      zIndex: 1000
+                    }}
+                    onClick={() => setDeleteProjectId(null)}
+                  >
+                    <div
                       style={{
-                        background: "#dc3545",
-                        color: "#fff",
-                        border: "none",
-                        padding: "8px 16px",
-                        borderRadius: "4px",
-                        fontWeight: "bold",
-                        cursor: "pointer"
+                        background: "#fff",
+                        padding: "32px",
+                        borderRadius: "12px",
+                        boxShadow: "0 2px 16px rgba(0,0,0,0.15)",
+                        minWidth: "350px",
+                        minHeight: "120px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "16px"
                       }}
+                      onClick={e => e.stopPropagation()}
                     >
-                      Oui, supprimer
-                    </button>
-                    <button
-                      onClick={() => setDeleteProjectId(null)}
-                      style={{
-                        background: "#222",
-                        color: "#fff",
-                        border: "none",
-                        padding: "8px 16px",
-                        borderRadius: "4px",
-                        fontWeight: "bold",
-                        cursor: "pointer"
-                      }}
-                    >
-                      Annuler
-                    </button>
+                      <h4 style={{ margin: 0, fontWeight: "bold", color: "#222" }}>Confirmer la suppression</h4>
+                      <div>Voulez-vous vraiment supprimer ce projet ?</div>
+                      <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                        <button
+                          onClick={() => handleDeleteProject(deleteProjectId)}
+                          style={{
+                            background: "#dc3545",
+                            color: "#fff",
+                            border: "none",
+                            padding: "8px 16px",
+                            borderRadius: "4px",
+                            fontWeight: "bold",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Oui, supprimer
+                        </button>
+                        <button
+                          onClick={() => setDeleteProjectId(null)}
+                          style={{
+                            background: "#222",
+                            color: "#fff",
+                            border: "none",
+                            padding: "8px 16px",
+                            borderRadius: "4px",
+                            fontWeight: "bold",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
-            )}
-          </div>
-          <div className="members-section" style={{
-            flex: 1,
-            background: "#fff",
-            borderRadius: "16px",
-            boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
-            padding: "32px",
-            minHeight: "340px"
-          }}>
-            <h3 style={{ fontWeight: "bold", fontSize: "1.2rem", color: "#222", marginBottom: "24px" }}>Membres du groupe</h3>
-            <ul className="members-list">
-              {!group ? (
-                <li>Chargement...</li>
-              ) : loading ? (
-                <li>Chargement...</li>
-              ) : members.length === 0 ? (
-                <li>Aucun membre dans ce groupe.</li>
-              ) : (
-                members.map(m => (
-                  <li key={m.id} style={{
-                    background: "#f5f6fa",
-                    borderRadius: "8px",
-                    padding: "12px 18px",
-                    marginBottom: "10px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    fontWeight: "bold",
-                    color: "#222"
-                  }}>
-                    <span>
-                      {m.username}
-                      {m.name && ` (${m.name})`}
-                      {m.email && ` - ${m.email}`}
-                    </span>
-                    <span className="role" style={{
-                      background: "#222",
-                      color: "#fff",
-                      borderRadius: "6px",
-                      padding: "4px 12px",
-                      fontWeight: "bold",
-                      fontSize: "0.95rem"
-                    }}>{m.role}</span>
-                  </li>
-                ))
-              )}
-            </ul>
-          </div>
+              <div className="members-section" style={{
+                flex: 1,
+                background: "#fff",
+                borderRadius: "16px",
+                boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
+                padding: "32px",
+                minHeight: "340px"
+              }}>
+                <h3 style={{ fontWeight: "bold", fontSize: "1.2rem", color: "#222", marginBottom: "24px" }}>Membres du groupe</h3>
+                <ul className="members-list">
+                  {!group ? (
+                    <li>Chargement...</li>
+                  ) : loading ? (
+                    <li>Chargement...</li>
+                  ) : members.length === 0 ? (
+                    <li>Aucun membre dans ce groupe.</li>
+                  ) : (
+                    members.map((m: any) => (
+                      <li key={m.id} style={{
+                        background: "#f5f6fa",
+                        borderRadius: "8px",
+                        padding: "12px 18px",
+                        marginBottom: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        fontWeight: "bold",
+                        color: "#222"
+                      }}>
+                        <span>
+                          {m.username}
+                          {m.name && ` (${m.name})`}
+                          {m.email && ` - ${m.email}`}
+                        </span>
+                        <span className="role" style={{
+                          background: "#222",
+                          color: "#fff",
+                          borderRadius: "6px",
+                          padding: "4px 12px",
+                          fontWeight: "bold",
+                          fontSize: "0.95rem"
+                        }}>{m.role}</span>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
+            </>
+          )}
         </section>
       </main>
     </div>
-  );
-};
+);
+}
 
 export default GestionProjet;

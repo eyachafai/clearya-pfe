@@ -8,6 +8,11 @@ const Message = require('./Message');
 const Projet = require('./projet');
 const ProjetMembre = require('./ProjetMembre');
 const Tache = require('./tache');
+const Ticket = require('./ticket');
+
+// Associations pour les groupes et utilisateurs
+Groupe.belongsToMany(Utilisateur, { through: GroupeUtilisateur, foreignKey: 'groupe_id', otherKey: 'utilisateur_id', as: 'membres' });
+Utilisateur.belongsToMany(Groupe, { through: GroupeUtilisateur, foreignKey: 'utilisateur_id', otherKey: 'groupe_id', as: 'groupes' });
 
 // Associations pour la messagerie et groupes
 Groupe.hasMany(GroupeUtilisateur, { foreignKey: 'groupe_id', as: 'groupeUtilisateurs' });
@@ -29,4 +34,5 @@ module.exports = {
   Projet,
   ProjetMembre,
   Tache,
+  Ticket,
 };

@@ -33,4 +33,3 @@ const Utilisateur = sequelize.define('Utilisateur', {
 });
 
 module.exports = Utilisateur;
-
