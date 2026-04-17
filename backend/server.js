@@ -18,6 +18,8 @@ const testKeycloakRoutes = require('./src/routes/testkeycloak');
 const messagesRoutes = require('./src/routes/messages.routes');
 const projetRoutes = require('./src/routes/projet.routes');
 const ticketRoutres = require('./src/routes/ticket.routes');
+const quotaRoutes = require('./src/routes/quota.routes');
+const notificationsRoutes = require('./src/routes/notification.routes');
 
 const app = express();
 // ➤ Sessions + Keycloak   /// il faut avant le middleware
@@ -47,6 +49,7 @@ const io = new Server(server, {
     methods: ["GET", "POST"]
   }
 });
+app.set('io', io);
 
 // Connecte socket.io à la route messages
 messagesRoutes.setSocketIo(io);
@@ -57,6 +60,17 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     console.log("Utilisateur déconnecté :", socket.id);
+  });
+});
+
+
+io.on("connection", (socket) => {
+  socket.on("joinGroupRoom", (groupId) => {
+    socket.join(`room_groupe_${groupId}`);
+  });
+  // Optionnel : quitter le room
+  socket.on("leaveGroupRoom", (groupId) => {
+    socket.leave(`room_groupe_${groupId}`);
   });
 });
 
@@ -76,6 +90,7 @@ app.use(bodyParser.raw({
 app.use('/api/auth', authRoutes);
 app.use('/api/keys', keysRouter);
 
+
 // app.use('/api/admin', keycloak.protect('realm:admin'), adminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/testKeycloakRoutes', testKeycloakRoutes);
@@ -85,6 +100,11 @@ app.use('/api/messages', (req, res, next) => {
 });
 app.use('/api/messages', messagesRoutes);
 app.use('/api', projetRoutes);
+app.use('/api', quotaRoutes);
+app.use('/api/notifications', notificationsRoutes);
+
+app.use('/uploads/files', express.static('uploads/files'));
+
 
 app.use((req, res, next) => {
   console.log("404 middleware catch:", req.method, req.url);

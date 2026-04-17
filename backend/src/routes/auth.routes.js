@@ -15,6 +15,7 @@ const ADMIN_USERNAME = process.env.KEYCLOAK_ADMIN;
 const ADMIN_PASSWORD = process.env.KEYCLOAK_PASSWORD;
 const CLIENT_ID = 'admin-cli'
 
+
 router.get('/me', async (req, res) => {
   // Vérifie la présence du token dans l'en-tête Authorization
   const authHeader = req.headers.authorization;

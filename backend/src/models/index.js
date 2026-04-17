@@ -9,6 +9,18 @@ const Projet = require('./projet');
 const ProjetMembre = require('./ProjetMembre');
 const Tache = require('./tache');
 const Ticket = require('./ticket');
+const sequelize = require('../config/db');
+const { DataTypes } = require('sequelize');
+const Rapport = require('./rapport')(sequelize, DataTypes);
+const Quota = require('./quota');
+const Files = require('./Files');
+const Notifications = require('./Notifications');
+const files = require("./Files");
+
+
+// Association Quota <-> Utilisateur
+Quota.belongsTo(Utilisateur, { foreignKey: 'user_id', as: 'utilisateur' });
+Utilisateur.hasOne(Quota, { foreignKey: 'user_id', as: 'quota' });
 
 // Associations pour les groupes et utilisateurs
 Groupe.belongsToMany(Utilisateur, { through: GroupeUtilisateur, foreignKey: 'groupe_id', otherKey: 'utilisateur_id', as: 'membres' });
@@ -22,6 +34,12 @@ GroupeUtilisateur.belongsTo(Groupe, { foreignKey: 'groupe_id', as: 'groupe' });
 Message.belongsTo(Utilisateur, { foreignKey: 'utilisateur_id', as: 'utilisateur' });
 Message.belongsTo(Conversation, { foreignKey: 'conversation_id', as: 'conversation' });
 Conversation.belongsTo(Groupe, { foreignKey: 'groupe_id', as: 'groupe' });
+Rapport.belongsTo(Projet, { foreignKey: 'projet_id', as: 'projet' });
+Projet.hasMany(Rapport, { foreignKey: 'projet_id', as: 'rapports' });
+
+// Association Notifications <-> Utilisateur (auteur de la notification)
+Notifications.belongsTo(Utilisateur, { foreignKey: 'envoye_par', as: 'auteur' });
+Utilisateur.hasMany(Notifications, { foreignKey: 'envoye_par', as: 'notificationsEnvoyees' });
 
 module.exports = {
   JournalConnexion,
@@ -35,4 +53,8 @@ module.exports = {
   ProjetMembre,
   Tache,
   Ticket,
+  Rapport,
+  Quota,
+  files,
+  Notifications,
 };

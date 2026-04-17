@@ -1,8 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import dotenv from 'dotenv';
-import path from 'path';
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+
 
 export default defineConfig({
   plugins: [react()],
@@ -11,5 +10,9 @@ export default defineConfig({
       '/api': 'http://localhost:5000',
       '/auth': 'http://localhost:8080'
     }
-  }
+  },
+  define: {
+    'process.env': {}, // ← باش ما تعودش تظهر الغلطة
+  },
+
 });

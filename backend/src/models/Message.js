@@ -9,7 +9,8 @@ const Message = sequelize.define("Message", {
   type: { type: DataTypes.STRING(16), defaultValue: 'text' },
   is_read: { type: DataTypes.BOOLEAN, defaultValue: false },
   date_envoi: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
-  file_id: { type: DataTypes.INTEGER, references: { model: 'files', key: 'id' }, onDelete: 'SET NULL' }
+  encryptedMessageData: { type: DataTypes.TEXT, allowNull: true },  // ajouté
+  encryptedAESKeyData: { type: DataTypes.TEXT, allowNull: true }     // ajouté
 }, {
   tableName: 'message',
   timestamps: false

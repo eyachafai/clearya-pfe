@@ -5,11 +5,10 @@ import { useLocation } from "react-router-dom";
 import { useKeycloak } from "@react-keycloak/web";
 import { Conversation } from "../../types/conversation";
 import { Message } from "../../types/message";
-import { io } from "socket.io-client";
-import { encryptAESKeyWithRSA, encryptWithAES, generateAESKey, decryptAESKeyWithRSA, decryptWithAES } from '../../utils/chiffrage';
+import { encryptAESKeyWithRSA, encryptWithAES, generateAESKey, decryptWithAES  } from '../../utils/chiffrage';
 import { sendMessage } from '../../services/chatService';
 import { fetchPublicKey } from '../../services/keyService';
-const socket = io("http://localhost:5000");
+import { socket } from "../../socket";
 
 const BACKEND_URL = "http://localhost:5000";
 
@@ -21,7 +20,6 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
   const [sending, setSending] = useState(false);
   const [groupeName] = useState<string>(props.groupeNameProp || "");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
   const { keycloak } = useKeycloak();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
@@ -29,6 +27,15 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
   const [utilisateur_id, setUtilisateurId] = useState<number | null>(null);
 
 
+  useEffect(() => {
+    console.log("[SOCKET] joinGroupRoom appelé pour groupe_id:", groupe_id);
+    socket.emit("joinGroupRoom", groupe_id); // Utilise bien groupe_id
+    // Ne quitte plus le room quand on quitte la page
+    // return () => {
+    //   console.log("[SOCKET] leaveGroupRoom appelé pour groupe_id:", groupe_id);
+    //   socket.emit("leaveGroupRoom", groupe_id);
+    // };
+  }, [groupe_id]);
 
   useEffect(() => {
     // Join la room du groupe pour recevoir les messages en temps réel
@@ -37,76 +44,70 @@ const ChatPage = (props: { groupeIdProp?: number, groupeNameProp?: string }) => 
     }
   }, [conversation?.id]);
 
-useEffect(() => {
-  let unsubSocket = false;
-
-  const fetchAll = async () => {
-    setLoading(true);
-    setConversation(null);
-    
-    try {
-      // 1️⃣ Récupère ou synchronise l'utilisateur
-      const syncUserId = async (): Promise<number | null> => {
-        try {
-          const idFromLocal = localStorage.getItem('utilisateur_id');
-          console.log('Vérification utilisateur_id en localStorage :', idFromLocal);
-          if (idFromLocal && !isNaN(Number(idFromLocal))) {
-            const check = await fetch(`/api/auth/users/${idFromLocal}`);
-            if (check.ok) {
-              setUtilisateurId(Number(idFromLocal));
-              console.log('🟢 Utilisateur trouvé via localStorage id:', idFromLocal);
-              return Number(idFromLocal);
-            } else {
-              localStorage.removeItem('utilisateur_id');
-            }
-          }
-
-          // Si pas trouvé en local, on passe à la synchro Keycloak
-          const headers: any = {};
-          if (keycloak?.token) headers.Authorization = `Bearer ${keycloak.token}`;
-          const creds = keycloak?.token ? 'same-origin' : 'include';
-
-          const res = await fetch('/api/auth/me', { credentials: creds, headers });
-          if (res.ok) {
-            const data = await res.json();
-            console.log('Utilisateur bien synchronisé avec la base :', data);
-
-            if (data && typeof data.id === 'number') {
-              localStorage.setItem('utilisateur_id', String(data.id));
-              localStorage.setItem('utilisateur', JSON.stringify(data));
-              setUtilisateurId(data.id);
-              return data.id;
-            }
-
-            if (data && data.keycloakId) {
-              // 🔁 Si pas d'id, on récupère via keycloakId
-              const r2 = await fetch(`${BACKEND_URL}/api/users/by-keycloak/${data.keycloakId}`);
-              if (r2.ok) {
-                const user = await r2.json();
-                if (user && typeof user.id === 'number') {
-                  localStorage.setItem('utilisateur_id', String(user.id));
-                  localStorage.setItem('utilisateur', JSON.stringify(user));
-                  setUtilisateurId(user.id);
-                  return user.id;
-                }
+  useEffect(() => {
+    let unsubSocket = false;
+    const fetchAll = async () => {
+      setLoading(true);
+      setConversation(null);
+      try {
+        // 1️⃣ Récupère ou synchronise l'utilisateur
+        const syncUserId = async (): Promise<number | null> => {
+          try {
+            const idFromLocal = localStorage.getItem('utilisateur_id');
+            console.log('Vérification utilisateur_id en localStorage :', idFromLocal);
+            if (idFromLocal && !isNaN(Number(idFromLocal))) {
+              const check = await fetch(`/api/auth/users/${idFromLocal}`);
+              if (check.ok) {
+                setUtilisateurId(Number(idFromLocal));
+                console.log('🟢 Utilisateur trouvé via localStorage id:', idFromLocal);
+                return Number(idFromLocal);
+              } else {
+                localStorage.removeItem('utilisateur_id');
               }
             }
-          } else {
-            console.warn('/api/auth/me returned', res.status);
+
+            // Si pas trouvé en local, on passe à la synchro Keycloak
+            const headers: any = {};
+            if (keycloak?.token) headers.Authorization = `Bearer ${keycloak.token}`;
+            const creds = keycloak?.token ? 'same-origin' : 'include';
+            const res = await fetch('/api/auth/me', { credentials: creds, headers });
+            if (res.ok) {
+              const data = await res.json();
+              console.log('Utilisateur bien synchronisé avec la base :', data);
+              if (data && typeof data.id === 'number') {
+                localStorage.setItem('utilisateur_id', String(data.id));
+                localStorage.setItem('utilisateur', JSON.stringify(data));
+                setUtilisateurId(data.id);
+                return data.id;
+              }
+              if (data && data.keycloakId) {
+                // 🔁 Si pas d'id, on récupère via keycloakId
+                const r2 = await fetch(`${BACKEND_URL}/api/users/by-keycloak/${data.keycloakId}`);
+                if (r2.ok) {
+                  const user = await r2.json();
+                  if (user && typeof user.id === 'number') {
+                    localStorage.setItem('utilisateur_id', String(user.id));
+                    localStorage.setItem('utilisateur', JSON.stringify(user));
+                    setUtilisateurId(user.id);
+                    return user.id;
+                  }
+                }
+              }
+            } else {
+              console.warn('/api/auth/me returned', res.status);
+            }
+            setUtilisateurId(null);
+            return null;
+          } catch (err) {
+            console.error('Erreur syncUserId :', err);
+            setUtilisateurId(null);
+            return null;
           }
+        };
 
-          setUtilisateurId(null);
-          return null;
-        } catch (err) {
-          console.error('Erreur syncUserId :', err);
-          setUtilisateurId(null);
-          return null;
-        }
-      };
+        await syncUserId();
 
-      await syncUserId();
-
-      // 2️⃣ Crée ou récupère la conversation
+  // 2️⃣ Crée ou récupère la conversation
       const convRes = await fetch("/api/messages/conversations/proxy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -348,6 +349,7 @@ return (
         <div style={{ color: "#888", textAlign: "center" }}>Aucun message.</div>
       ) : (
         Array.isArray(messages) && messages.map((msg, idx) => {
+          console.log("Message:", msg);
           const contenu = msg.contenu?.trim();
           if (!contenu) return null;
 
@@ -363,7 +365,9 @@ return (
           if (msg.type === "audio" && contenu.startsWith("[audio]")) {
             const audioFile = contenu.replace("[audio] ", "");
             displayedContent = (
-              <AudioPlayer filename={audioFile} />
+              <div style={{ padding: 6, borderRadius: 8 }}>
+                <AudioPlayer filename={audioFile} />
+              </div>
             );
           }
           // Affichage image ou fichier
@@ -529,29 +533,11 @@ export default ChatPage;
 
 // Ajoute ce composant utilitaire dans le même fichier (ou à part si tu préfères)
 function AudioPlayer({ filename }: { filename: string }) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-
-  const handlePlay = () => {
-    audioRef.current?.play();
-  };
-
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <button
-        onClick={handlePlay}
-        style={{
-          background: "#fff",
-          border: "none",
-          cursor: "pointer",
-          fontSize: "2rem",
-          marginRight: 8
-        }}
-        title="Écouter l'audio"
-      >
-        <span role="img" aria-label="audio">🔊</span>
-      </button>
-      <audio ref={audioRef} src={`${BACKEND_URL}/uploads/${filename}`} preload="auto" />
-    </div>
+    <audio controls style={{ width: '220px', minWidth: '180px' }}>
+      <source src={`${BACKEND_URL}/uploads/${filename}`} type="audio/webm" />
+      Votre navigateur ne supporte pas l'audio.
+    </audio>
   );
 }
 
@@ -563,16 +549,10 @@ MIIBVwIBADANBgkqhkiG9w0BAQEFAASCAT8wggE7AgEAAkEAu...etc...
 // Utility to decrypt a message object
 function decryptMessage(msg: Message): string | null {
   try {
-    if (msg.encryptedMessageData && msg.encryptedAESKeyData) {
-      // 1. Decrypt AES key with RSA private key
-      const aesKey = decryptAESKeyWithRSA(msg.encryptedAESKeyData, PRIVATE_KEY);
-      // 2. Decrypt message with AES key
-      const encryptedData = JSON.parse(msg.encryptedMessageData);
-      return decryptWithAES(encryptedData.ciphertext, aesKey, encryptedData.iv);
-    }
+    // Affiche le contenu original si la fonction de déchiffrement n'existe pas
     return msg.contenu;
   } catch (e) {
     console.error("Erreur déchiffrement:", e);
-    return "[Erreur déchiffrement]";
+    return msg.contenu;
   }
 }

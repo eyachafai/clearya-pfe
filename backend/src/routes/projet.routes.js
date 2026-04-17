@@ -1,17 +1,23 @@
 const express = require('express');
 const router = express.Router();
 const { Groupe, GroupeUtilisateur, Utilisateur, Projet, ProjetMembre, Tache, Ticket } = require('../models');
+const { Rapport } = require('../models');
 const sequelize = require('../config/db');
+const multer = require('multer');
+
 
 // Associations
 GroupeUtilisateur.belongsTo(Utilisateur, { foreignKey: 'utilisateur_id' });
 GroupeUtilisateur.belongsTo(Groupe, { foreignKey: 'groupe_id' });
 
+
+
+
 // Liste des états possibles pour les taches
 const ETATS_TACHE = [
-  "à faire",
+  "a faire",
   "en cours",
-  "terminée"];
+  "terminee"];
 
 // Liste des états possibles pour les tickets
 const ETATS_Ticket = [
@@ -96,8 +102,8 @@ router.get('/groupes-utilisateur/:utilisateur_id', async (req, res) => {
 
 // GET /api/groupes/:id/members
 router.get('/groupes/:id/members', async (req, res) => {
-    const { id } = req.params;
-    console.log("id groupe:", id);
+  const { id } = req.params;
+  console.log("id groupe:", id);
   try {
     const membres = await GroupeUtilisateur.findAll({
       where: { groupe_id: id },
@@ -249,13 +255,16 @@ router.delete('/projet/:id/membres/:utilisateur_id', async (req, res) => {
 // GET /api/projet/:id/taches
 router.get('/projet/:id/taches', async (req, res) => {
   const { id } = req.params;
+  const { etat } = req.query;
   try {
+    const where = { projet_id: id };
+    if (etat) where.etat = etat;
     const taches = await Tache.findAll({
-      where: { projet_id: id },
+      where,
       include: [{
         model: Utilisateur,
         as: 'membre',
-        attributes: ['id', 'username', 'email', 'first_name', 'last_name', 'keycloak_id'] // Ajoute keycloak_id ici
+        attributes: ['id', 'username', 'email', 'first_name', 'last_name', 'keycloak_id']
       }]
     });
     const result = taches.map(t => ({
@@ -268,9 +277,9 @@ router.get('/projet/:id/taches', async (req, res) => {
         username: t.membre.username,
         email: t.membre.email,
         name: t.membre.first_name + ' ' + t.membre.last_name,
-        keycloak_id: t.membre.keycloak_id 
+        keycloak_id: t.membre.keycloak_id
       } : null,
-      etat: t.etat 
+      etat: t.etat
     }));
     res.json(result);
   } catch (err) {
@@ -342,6 +351,7 @@ router.put('/projet/:id/taches/:tache_id', async (req, res) => {
 
 // PATCH /api/projet/:projet_id/taches/:tache_id/etat
 router.patch('/projet/:projet_id/taches/:tache_id/etat', async (req, res) => {
+  console.log("[API] PATCH /projet/:projet_id/taches/:tache_id/etat appelé");
   const { projet_id, tache_id } = req.params;
   const { etat, utilisateur_id } = req.body;
   const allowed = ETATS_TACHE;
@@ -361,7 +371,9 @@ router.patch('/projet/:projet_id/taches/:tache_id/etat', async (req, res) => {
   }
 
   const oldEtat = tache.etat;
+  console.log(`[API] Avant update: tache.id=${tache.id}, etat=${tache.etat}`);
   await tache.update({ etat });
+  console.log(`[API] Après update: tache.id=${tache.id}, etat=${tache.etat}`);
 
   // (Optionnel) log dans la console
   console.log(`[API] Etat tâche ${tache.id} changé: ${oldEtat} → ${etat} par user ${utilisateur_id}`);
@@ -458,7 +470,11 @@ router.post('/tickets', async (req, res) => {
 router.put('/tickets/:id', async (req, res) => {
   const { titre, description, assignee_id, etat, resolved_at } = req.body;
   try {
-    const ticket = await Ticket.findByPk(req.params.id);
+    const ticket = await Ticket.findByPk(req.params.id, {
+      include: [
+        { model: Utilisateur, as: 'creator', attributes: ['id', 'username', 'email'] }
+      ]
+    });
     if (!ticket) return res.status(404).json({ error: "Ticket non trouvé" });
     if (titre !== undefined) ticket.titre = titre;
     if (description !== undefined) ticket.description = description;
@@ -466,6 +482,21 @@ router.put('/tickets/:id', async (req, res) => {
     if (etat !== undefined) ticket.etat = etat;
     if (resolved_at !== undefined) ticket.resolved_at = resolved_at;
     await ticket.save();
+    console.log(`[API] Ticket ${ticket.id} mis à jour.`);
+    // Notification socket (créateur et assigné)
+    const io = req.app.get('io');
+    if (io) {
+      const notif = {
+        titre: 'Ticket mis à jour',
+        message: `Le ticket "${ticket.titre}" a été modifié.`,
+        ticketId: ticket.id,
+        auteur: ticket.creator ? { username: ticket.creator.username } : undefined
+      };
+      io.to(String(ticket.created_by)).emit('notification', notif);
+      if (ticket.assignee_id && ticket.assignee_id !== ticket.created_by) {
+        io.to(String(ticket.assignee_id)).emit('notification', notif);
+      }
+    }
     res.json({ success: true, ticket });
   } catch (err) {
     res.status(500).json({ error: "Erreur mise à jour ticket", details: err.message });
@@ -474,17 +505,27 @@ router.put('/tickets/:id', async (req, res) => {
 
 // PATCH /api/tickets/:id/etat
 router.patch('/tickets/:id/etat', async (req, res) => {
+  console.log('[BACK] PATCH /tickets/:id/etat appelé avec:', req.body);
   const { etat, utilisateur_id } = req.body;
   const allowed = ["nouveau", "en cours", "resolu", "ferme", "fermée"];
   if (!allowed.includes(etat)) {
+    console.log('[BACK] Etat non autorisé:', etat);
     return res.status(400).json({ error: "Etat invalide" });
   }
-  if (!utilisateur_id) return res.status(400).json({ error: "utilisateur_id requis" });
+  if (!utilisateur_id) {
+    console.log('[BACK] utilisateur_id manquant');
+    return res.status(400).json({ error: "utilisateur_id requis" });
+  }
   try {
-    const ticket = await Ticket.findByPk(req.params.id);
+    const ticket = await Ticket.findByPk(req.params.id, {
+      include: [
+        { model: Utilisateur, as: 'creator', attributes: ['id', 'username', 'email'] }
+      ]
+    });
+    console.log('[BACK] Ticket trouvé:', ticket ? ticket.id : null);
     if (!ticket) return res.status(404).json({ error: "Ticket non trouvé" });
-    // Seul l'assignee peut changer l'état
     if (Number(ticket.assignee_id) !== Number(utilisateur_id)) {
+      console.log('[BACK] utilisateur_id non autorisé:', utilisateur_id);
       return res.status(403).json({ error: "Vous n'êtes pas autorisé à changer cet état" });
     }
     const oldEtat = ticket.etat;
@@ -493,9 +534,27 @@ router.patch('/tickets/:id/etat', async (req, res) => {
       ticket.resolved_at = new Date();
     }
     await ticket.save();
-    // (Optionnel) notification ici
+    console.log(`[BACK] Ticket ${ticket.id} mis à jour. Ancien état: ${oldEtat}, Nouvel état: ${etat}`);
+    // Notification socket (créateur et assigné)
+    const io = req.app.get('io');
+    if (io) {
+      const notif = {
+        titre: 'Ticket mis à jour',
+        message: `Le ticket \"${ticket.titre}\" a été modifié (état: ${etat}).`,
+        ticketId: ticket.id,
+        auteur: ticket.creator ? { username: ticket.creator.username } : undefined
+      };
+      console.log('[BACK] Envoi notification à:', ticket.created_by, ticket.assignee_id);
+      io.to(String(ticket.created_by)).emit('notification', notif);
+      if (ticket.assignee_id && ticket.assignee_id !== ticket.created_by) {
+        io.to(String(ticket.assignee_id)).emit('notification', notif);
+      }
+    } else {
+      console.log('[BACK] io non disponible');
+    }
     res.json(ticket);
   } catch (err) {
+    console.error('[BACK] Erreur PATCH /tickets/:id/etat:', err);
     res.status(500).json({ error: "Erreur changement état ticket", details: err.message });
   }
 });
@@ -555,6 +614,75 @@ router.get('/users/by-keycloak/:keycloakId', async (req, res) => {
   } catch (err) {
     console.error('[API] Erreur récupération utilisateur par keycloak:', err);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
+  }
+});
+
+
+// Destination des fichiers uploadés
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/rapports'); // créer ce dossier si il n’existe pas
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = Date.now() + '_' + file.originalname;
+    cb(null, uniqueName);
+  }
+});
+
+const upload = multer({ storage });
+
+
+
+// GET /api/rapports
+router.get('/rapports', async (req, res) => {
+  console.log('[API] GET /api/rapports', req.query);
+  const { projet_id, date, type, auteur } = req.query;
+  const where = {};
+  if (projet_id) where.projet_id = projet_id;
+  if (date) where.date = date;
+  if (type) where.type = type;
+  if (auteur) where.auteur = auteur;
+  try {
+    const rapports = await Rapport.findAll({ where, order: [['date', 'DESC']] });
+    res.json(rapports);
+  } catch (err) {
+    console.error('[API] GET /api/rapports ERROR:', err);
+    res.status(500).json({ error: 'Erreur récupération rapports', details: err.message });
+  }
+});
+
+// POST /api/rapports
+router.post('/rapports', upload.single('fichier'), async (req, res) => {
+  try {
+    console.log('[API] POST /api/rapports', req.body, req.file);
+    const { nom, date, type, projet_id, auteur } = req.body;
+    if (!nom || !date || !type) {
+      return res.status(400).json({ error: "nom, date et type requis" });
+    }
+    // Sauvegarde en base
+    const rapport = await Rapport.create({
+      nom,
+      date,
+      type,
+      projet_id,
+      auteur,
+      chemin_fichier: req.file?.path || null
+    });
+    res.status(201).json(rapport);
+  } catch (err) {
+    console.error('[API] Erreur création rapport:', err);
+    res.status(500).json({ error: 'Erreur upload rapport', details: err.message });
+  }
+});
+
+// GET /api/rapports/:id/download
+router.get('/rapports/:id/download', async (req, res) => {
+  try {
+    const rapport = await Rapport.findByPk(req.params.id);
+    if (!rapport) return res.status(404).json({ error: 'Rapport non trouvé' });
+    res.download(rapport.chemin_fichier);
+  } catch (err) {
+    res.status(500).json({ error: 'Erreur téléchargement rapport', details: err.message });
   }
 });
 

@@ -1,5 +1,6 @@
 import keycloak from "./config/keycloak";
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'; // Ajoute Navigate
+import { socket } from "./socket";
 import Home from './components/Home';
 import Profile from './components/Profile';
 import EditProfile from "./components/EditProfile";
@@ -17,6 +18,14 @@ import GestionProjet from './components/projet/gestion-projet';
 import Projet from './components/projet/projet';
 import TicketPage from './components/projet/ticket';
 import TicketPageAdmin from './components/admin/ticketPageAdmin';
+import GestionQuotas from './components/admin/quota'
+import FichiersAd from "./components/admin/fichiersAdm";
+import Notifications from "./components/admin/notifications";
+import NotificationsUser from './components/user/notifications-user';
+import NotificationsListener from "./components/NotificationsListener";
+
+
+
 
 import { useKeycloak } from "@react-keycloak/web";
 import { setToken } from "./services/authService";
@@ -57,7 +66,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   // Ajoute une classe spéciale au body uniquement sur la page Home
-  const isHome = window.location.pathname === '/';
+  //const isHome = window.location.pathname === '/';
 
   return (
     <div>
@@ -108,11 +117,9 @@ const TicketPageWrapper = () => {
   // Récupère les membres et le groupe depuis localStorage ou API si besoin
   // Exemple simple :
   const members = JSON.parse(localStorage.getItem("members") || "[]");
-  const currentUserId = user?.id || user?.sub ? members.find((m: any) => m.keycloak_id === (user?.id || user?.sub))?.id : null;
 
   return (
     <TicketPage
-      currentUserId={currentUserId}
       allMembers={members}
     />
   );
@@ -124,36 +131,52 @@ const App = () => {
   useEffect(() => {
     if (initialized && keycloak?.authenticated && keycloak?.token) {
       setToken(keycloak.token);
-      //    console.log("✅ Token sauvegardé :", keycloak.token);
+      // Récupère la liste des groupes de l'utilisateur (exemple via localStorage)
+      const groupes = JSON.parse(localStorage.getItem("groupes") || "[]");
+      if (Array.isArray(groupes)) {
+        groupes.forEach((g: any) => {
+          if (g.id) {
+            console.log("[SOCKET] joinGroupRoom global pour groupe_id:", g.id);
+            socket.emit("joinGroupRoom", g.id);
+          }
+        });
+      }
     }
   }, [initialized, keycloak]);
 
   return (
-    <Router> {/* Utilisation du Router pour encapsuler toutes les routes */}
-      <AppLayout>
-        <Routes>
-          {/* Définition des routes */}
-          <Route path="/" element={<Home />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/edit-profile" element={<EditProfile />} />
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/principal" element={<PrincipalPage />} />
-          <Route path="/journal-connexion" element={<JournalConnexionPage />} />
-          <Route path="/groupes" element={<GroupesPage />} />
-          <Route path="/add-group" element={<AjouterGroupe />} />
-          <Route path="/edit-group/" element={<ModifierGroupe />} />
-          <Route path="/chat" element={<ChatPage />} />
-          <Route path="/gestion-utilisateurs" element={<GestionUtilisateursPage />} />
-          <Route path="/utilisateurs" element={<UtilisateursPage />} />
-          <Route path="/mes-groupes-chat" element={<MesGroupesChatPage />} />
-          <Route path="/gestion-projet" element={<GestionProjet />} />
-          <Route path="/projet/:id" element={<Projet />} />
-          <Route path="/tickets" element={<TicketPageWrapper />} />
-          <Route path="/admintickets" element={<TicketPageAdmin />} />
+    <>
+      <NotificationsListener />
+      <Router> {/* Utilisation du Router pour encapsuler toutes les routes */}
+        <AppLayout>
+          <Routes>
+            {/* Définition des routes */}
+            <Route path="/" element={<Home />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/edit-profile" element={<EditProfile />} />
+            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/principal" element={<PrincipalPage />} />
+            <Route path="/journal-connexion" element={<JournalConnexionPage />} />
+            <Route path="/groupes" element={<GroupesPage />} />
+            <Route path="/add-group" element={<AjouterGroupe />} />
+            <Route path="/edit-group/" element={<ModifierGroupe />} />
+            <Route path="/chat" element={<ChatPage />} />
+            <Route path="/gestion-utilisateurs" element={<GestionUtilisateursPage />} />
+            <Route path="/utilisateurs" element={<UtilisateursPage />} />
+            <Route path="/mes-groupes-chat" element={<MesGroupesChatPage />} />
+            <Route path="/gestion-projet" element={<GestionProjet />} />
+            <Route path="/projet/:id" element={<Projet />} />
+            <Route path="/tickets" element={<TicketPageWrapper />} />
+            <Route path="/admintickets" element={<TicketPageAdmin />} />
+            <Route path="/quotas" element={<GestionQuotas/>} />
+            <Route path="/fichiersAd" element={<FichiersAd/>} />
+            <Route path="/notifications" element={<Notifications/>} />
+            <Route path="/notifications-user" element={<NotificationsUser/>} />
 
-        </Routes>
-      </AppLayout>
-    </Router>
+          </Routes>
+        </AppLayout>
+      </Router>
+    </>
   );
 };
 

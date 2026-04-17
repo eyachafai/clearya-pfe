@@ -1,22 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import "./gestion-projet.css";
 import { useKeycloak } from "@react-keycloak/web";
 import { useNavigate } from "react-router-dom";
-import { FaTrash } from "react-icons/fa";
+import { FaTrash, FaEye, FaDownload, FaArrowLeft } from "react-icons/fa";
 import TicketPage from "./ticket"; // Correction du chemin et nom
+import { PieChart, Pie, Cell } from 'recharts';
 
 const GestionProjet = () => {
   const { keycloak } = useKeycloak();
   const user = keycloak.tokenParsed;
   const [group, setGroup] = useState<any>(null);
   const [projects, setProjects] = useState<any[]>([]);
+  
   const [members, setMembers] = useState<any[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [loading, setLoading] = useState(true);
   const [deleteProjectId, setDeleteProjectId] = useState<number | null>(null);
   const [showTickets, setShowTickets] = useState(false);
+  const [showFichiers, setShowFichiers] = useState(false);
+  const [userQuota, setUserQuota] = useState<{ quota_mb: number; used_mb: number } | null>(null);
+  const [sharedFiles, setSharedFiles] = useState<any[]>([]);
+  const [userId, setUserId] = useState<number | null>(null);
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Récupère le groupe principal de l'utilisateur (hors "employee")
   useEffect(() => {
@@ -92,6 +99,25 @@ const GestionProjet = () => {
     if (user?.id || user?.sub) fetchGroupAndData();
   }, [user?.id, user?.sub]);
 
+  // Fetch quota for connected user
+  async function fetchUserQuota() {
+    const keycloakId = user?.id || user?.sub;
+    if (!keycloakId) return;
+    const userRes = await fetch(`/api/users/by-keycloak/${keycloakId}`);
+    if (!userRes.ok) return;
+    const userData = await userRes.json();
+    setUserId(userData.id); // Stocke l'id utilisateur
+    const quotaRes = await fetch(`/api/${userData.id}`);
+    if (quotaRes.ok) {
+      setUserQuota(await quotaRes.json());
+    }
+  }
+
+  useEffect(() => {
+    fetchUserQuota();
+  }, [user?.id, user?.sub]);
+
+
   // Handle project creation
   const handleCreateProject = async () => {
     if (!newProjectName.trim() || !group) return;
@@ -135,6 +161,81 @@ const GestionProjet = () => {
     navigate(`/projet/${proj.id}`, { state: { projet: proj, group, members } });
   };
 
+  // Fonction d'upload de fichier
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    console.log('[FRONT] Fichier sélectionné:', file);
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    // Ajoute l'id utilisateur interne pour le quota
+    if (userQuota) {
+      const keycloakId = user?.id || user?.sub;
+      const userRes = await fetch(`/api/users/by-keycloak/${keycloakId}`);
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        if (userData.id) {
+          formData.append('user_id', userData.id);
+        }
+      }
+    }
+    try {
+      const res = await fetch('http://localhost:5000/api/files', {
+        method: 'POST',
+        body: formData
+      });
+      console.log('[FRONT] Réponse upload:', res.status, res.statusText);
+      if (res.ok) {
+        const filesRes = await fetch('http://localhost:5000/api/files');
+        if (filesRes.ok) {
+          const filesList = await filesRes.json();
+          setSharedFiles(filesList);
+          console.log('[FRONT] Liste fichiers après upload:', filesList);
+        } else {
+          console.error('[FRONT] Erreur fetch files après upload:', filesRes.status, await filesRes.text());
+        }
+        // Rafraîchir le quota après upload
+        fetchUserQuota();
+      } else {
+        const errorText = await res.text();
+        console.error('[FRONT] Erreur upload:', errorText);
+      }
+    } catch (err) {
+      console.error('[FRONT] Exception upload:', err);
+    }
+  };
+
+  const handleImportClick = () => {
+    console.log('[FRONT] Bouton Importer un fichier cliqué');
+    fileInputRef.current?.click();
+  };
+
+  // Charge les fichiers partagés lorsque la section Partage Fichiers est ouverte
+  useEffect(() => {
+    if (showFichiers) {
+      fetch('http://localhost:5000/api/files')
+        .then(res => res.ok ? res.json() : [])
+        .then(data => setSharedFiles(Array.isArray(data) ? data : []))
+        .catch(() => setSharedFiles([]));
+    }
+  }, [showFichiers]);
+
+  // Fonction de suppression de fichier
+  const handleDeleteFile = async (fileId: number) => {
+    if (!userId) return;
+    await fetch(`http://localhost:5000/api/files/${fileId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId })
+    });
+    // Rafraîchir la liste et le quota
+    const filesRes = await fetch('http://localhost:5000/api/files');
+    if (filesRes.ok) {
+      setSharedFiles(await filesRes.json());
+    }
+    fetchUserQuota();
+  };
+
   return (
     <div className="dashboard-wrapper" style={{ background: "#f5f6fa", minHeight: "100vh" }}>
       <aside className="sidebar" style={{
@@ -167,7 +268,10 @@ const GestionProjet = () => {
             >
               Tickets
             </li>
-            <li style={{ margin: "8px 16px", padding: "12px 20px", borderRadius: "8px", cursor: "pointer" }}>Partage Fichiers</li>
+            <li style={{ margin: "8px 16px", padding: "12px 20px", borderRadius: "8px", cursor: "pointer" }}
+              onClick={() => setShowFichiers(true)}
+            >Partage Fichiers</li>
+
             <li style={{ margin: "8px 16px", padding: "12px 20px", borderRadius: "8px", cursor: "pointer" }}>Équipes</li>
           </ul>
         </nav>
@@ -208,7 +312,6 @@ const GestionProjet = () => {
               <TicketPage
                 currentUserId={user?.id || user?.sub ? members.find((m: any) => m.keycloak_id === (user?.id || user?.sub))?.id : null}
                 allMembers={members}
-                isManager={group?.role === "manager"}
               />
               <button
                 style={{
@@ -226,295 +329,401 @@ const GestionProjet = () => {
                 Retour aux projets
               </button>
             </div>
+          ) : showFichiers ? (
+            <section style={{ display: 'flex', width: '100%', gap: 32, position: 'relative' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, zIndex: 100 }}>
+                <button onClick={() => setShowFichiers(false)} style={{ background: 'transparent', border: 'none', borderRadius: 8, padding: 0, cursor: 'pointer' }} title="Fermer">
+                  <FaArrowLeft size={32} color="#222" />
+                </button>
+              </div>
+              {/* Left: Quota Dashboard */}
+              <div style={{ width: 340, minWidth: 280, background: '#fff', borderRadius: 18, boxShadow: '0 4px 24px rgba(0,0,0,0.10)', padding: 24, height: 'fit-content', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <h3 style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#222', marginBottom: 8, letterSpacing: 1 }}>STOCKAGE</h3>
+                <div style={{ fontSize: '1.05rem', color: '#888', marginBottom: 8 }}>{user?.email || user?.preferred_username}</div>
+                {userQuota && (
+                  <>
+                    {(userQuota.used_mb / userQuota.quota_mb) >= 1 && (
+                      <div style={{ background: '#dc3545', color: '#fff', padding: 10, borderRadius: 8, marginBottom: 12, fontWeight: 'bold', textAlign: 'center' }}>
+                        Vous avez dépassé votre quota de stockage !
+                      </div>
+                    )}
+                    {(userQuota.used_mb / userQuota.quota_mb) >= 0.8 && (userQuota.used_mb / userQuota.quota_mb) < 1 && (
+                      <div style={{ background: '#ffc107', color: '#222', padding: 10, borderRadius: 8, marginBottom: 12, fontWeight: 'bold', textAlign: 'center' }}>
+                        Attention : vous avez utilisé plus de 80% de votre quota !
+                      </div>
+                    )}
+                    <PieChart width={180} height={180} style={{ margin: '0 auto' }}>
+                      <Pie
+                        data={[
+                          { name: 'Utilisé', value: userQuota.used_mb },
+                          { name: 'Libre', value: Math.max(userQuota.quota_mb - userQuota.used_mb, 0) }
+                        ]}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        startAngle={90}
+                        endAngle={-270}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        <Cell key="used" fill="#198754" />
+                        <Cell key="free" fill="#eaf1fb" />
+                      </Pie>
+                      <text x={90} y={95} textAnchor="middle" dominantBaseline="middle" fontSize="2.1rem" fontWeight="bold" fill="#222">{userQuota.used_mb.toFixed(2)}</text>
+                      <text x={90} y={120} textAnchor="middle" fontSize="1rem" fill="#888">/{userQuota.quota_mb} Mo</text>
+                    </PieChart>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 16 }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#198754' }}>{userQuota.used_mb.toFixed(2)} Mo</div>
+                        <div style={{ color: '#888', fontSize: '0.95rem' }}>Utilisé</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#2d3a4a' }}>{(userQuota.quota_mb - userQuota.used_mb).toFixed(2)} Mo</div>
+                        <div style={{ color: '#888', fontSize: '0.95rem' }}>Libre</div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#222' }}>{userQuota.quota_mb} Mo</div>
+                        <div style={{ color: '#888', fontSize: '0.95rem' }}>Total</div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+              {/* Center: File sharing section */}
+              <div style={{ flex: 1, background: '#e9e9f1ff', borderRadius: 30, minHeight: 400, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', fontSize: 24, color: '#888', gap: 24, padding: 32 }}>
+                <div style={{ fontSize: 22, color: '#222', marginBottom: 16 }}>Partage de fichiers</div>
+                {/* Upload */}
+                <label style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+                  <button type="button" onClick={handleImportClick} style={{ background: '#000000ff', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontWeight: 'bold', fontSize: 16, cursor: 'pointer', marginBottom: 16 }}>
+                    Importer un fichier
+                  </button>
+                  <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} />
+                </label>
+                {/* Liste des fichiers partagés */}
+                <div style={{ width: '1000%', maxWidth: 550, background: '#fff', borderRadius: 12, boxShadow: '4px 8px 12px rgba(0,0,0,0.06)', padding: 30, marginTop: 8 }}>
+                  <div style={{ fontWeight: 'bold', color: '#222', marginBottom: 10, fontSize: 18 }}>Fichiers partagés</div>
+                  {sharedFiles.length === 0 ? (
+                    <div style={{ color: '#888', fontSize: 16 }}>Aucun fichier partagé.</div>
+                  ) : (
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                      {sharedFiles.map(file => {
+                        const fileUrl = `http://localhost:5000${file.file_url}`;
+                        const isOwner = userId && file.user_id === userId;
+                        return (
+                          <li key={file.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
+                            <span style={{ color: '#222', fontWeight: 500 }}>{file.file_name}</span>
+                            <span style={{ color: '#888', fontSize: 14 }}>{file.size ? file.size + ' Ko' : ''}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <a href={fileUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#222', marginRight: 4 }} title="Voir le fichier">
+                                <FaEye size={22} />
+                              </a>
+                              <a href={fileUrl} download style={{ color: '#222', textDecoration: 'none' }} title="Télécharger">
+                                <FaDownload size={22} />
+                              </a>
+                              {isOwner && (
+                                <button onClick={() => handleDeleteFile(file.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }} title="Supprimer">
+                                  <FaTrash size={22} color="#dc3545" />
+                                </button>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </section>
           ) : (
-            <>
-              <div className="projects-section" style={{
-                flex: 2,
-                background: "#fff",
-                borderRadius: "16px",
-                boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
-                padding: "32px",
-                minHeight: "340px"
+          <>
+            <div className="projects-section" style={{
+              flex: 2,
+              background: "#fff",
+              borderRadius: "16px",
+              boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
+              padding: "32px",
+              minHeight: "340px"
+            }}>
+              <div className="section-header" style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: "24px"
               }}>
-                <div className="section-header" style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: "24px"
-                }}>
-                  <h3 style={{ fontWeight: "bold", fontSize: "1.2rem", color: "#222" }}>Projets du groupe</h3>
-                  {group?.role &&
-                    group.role.toLowerCase().includes("manager") && (
+                <h3 style={{ fontWeight: "bold", fontSize: "1.2rem", color: "#222" }}>Projets du groupe</h3>
+                {group?.role &&
+                  group.role.toLowerCase().includes("manager") && (
+                    <button
+                      onClick={() => setShowCreate(true)}
+                      className="btn-create"
+                      style={{
+                        background: "#222",
+                        color: "#fff",
+                        border: "none",
+                        padding: "8px 16px",
+                        borderRadius: "8px",
+                        fontWeight: "bold",
+                        cursor: "pointer",
+                        fontSize: "1rem"
+                      }}
+                    >
+                      + Créer un projet
+                    </button>
+                  )
+                }
+              </div>
+              {/* Modal centré pour création projet */}
+              {showCreate && (
+                <div
+                  className="modal-overlay"
+                  style={{
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    width: "100vw",
+                    height: "100vh",
+                    background: "rgba(0,0,0,0.3)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 1000
+                  }}
+                  onClick={() => setShowCreate(false)}
+                >
+                  <div
+                    className="modal-content"
+                    style={{
+                      background: "#fff",
+                      padding: "32px",
+                      borderRadius: "12px",
+                      boxShadow: "0 2px 16px rgba(0,0,0,0.15)",
+                      minWidth: "350px",
+                      minHeight: "120px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "16px"
+                    }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <h4 style={{ margin: 0, fontWeight: "bold", color: "#222" }}>Créer un projet</h4>
+                    <input
+                      type="text"
+                      placeholder="Nom du projet"
+                      value={newProjectName}
+                      onChange={e => setNewProjectName(e.target.value)}
+                      style={{
+                        padding: "8px",
+                        borderRadius: "4px",
+                        border: "1px solid #ccc"
+                      }}
+                    />
+                    <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
                       <button
-                        onClick={() => setShowCreate(true)}
-                        className="btn-create"
+                        onClick={handleCreateProject}
+                        style={{
+                          background: "#198754",
+                          color: "#fff",
+                          border: "none",
+                          padding: "8px 16px",
+                          borderRadius: "4px",
+                          fontWeight: "bold",
+                          cursor: "pointer"
+                        }}
+                      >
+                        Créer
+                      </button>
+                      <button
+                        onClick={() => setShowCreate(false)}
+                        style={{
+                          background: "#dc3545",
+                          color: "#fff",
+                          border: "none",
+                          padding: "8px 16px",
+                          borderRadius: "4px",
+                          fontWeight: "bold",
+                          cursor: "pointer"
+                        }}
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <ul className="projects-list" style={{ marginTop: "16px" }}>
+                {!group ? (
+                  <li>Chargement...</li>
+                ) : loading ? (
+                  <li>Chargement...</li>
+                ) : projects.length === 0 ? (
+                  <li>Aucun projet dans ce groupe.</li>
+                ) : (
+                  projects.map(proj => (
+                    <li
+                      key={proj.id}
+                      className="project-item"
+                      style={{
+                        background: "#222",
+                        color: "#fff",
+                        borderRadius: "8px",
+                        padding: "18px 24px",
+                        marginBottom: "12px",
+                        fontWeight: "bold",
+                        fontSize: "1.1rem",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between"
+                      }}
+                    >
+                      <span onClick={() => handleProjectClick(proj)} style={{ flex: 1 }}>
+                        {proj.name}
+                      </span>
+                      {group?.role && group.role.toLowerCase().includes("manager") && (
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            setDeleteProjectId(proj.id);
+                          }}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            marginLeft: "16px",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center"
+                          }}
+                          title="Supprimer le projet"
+                        >
+                          <FaTrash color="#fff" size={18} />
+                        </button>
+                      )}
+                    </li>
+                  ))
+                )}
+              </ul>
+              {/* Modal de confirmation suppression */}
+              {deleteProjectId !== null && (
+                <div
+                  style={{
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    width: "100vw",
+                    height: "100vh",
+                    background: "rgba(0,0,0,0.3)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 1000
+                  }}
+                  onClick={() => setDeleteProjectId(null)}
+                >
+                  <div
+                    style={{
+                      background: "#fff",
+                      padding: "32px",
+                      borderRadius: "12px",
+                      boxShadow: "0 2px 16px rgba(0,0,0,0.15)",
+                      minWidth: "350px",
+                      minHeight: "120px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "16px"
+                    }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <h4 style={{ margin: 0, fontWeight: "bold", color: "#222" }}>Confirmer la suppression</h4>
+                    <div>Voulez-vous vraiment supprimer ce projet ?</div>
+                    <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                      <button
+                        onClick={() => handleDeleteProject(deleteProjectId)}
+                        style={{
+                          background: "#dc3545",
+                          color: "#fff",
+                          border: "none",
+                          padding: "8px 16px",
+                          borderRadius: "4px",
+                          fontWeight: "bold",
+                          cursor: "pointer"
+                        }}
+                      >
+                        Oui, supprimer
+                      </button>
+                      <button
+                        onClick={() => setDeleteProjectId(null)}
                         style={{
                           background: "#222",
                           color: "#fff",
                           border: "none",
                           padding: "8px 16px",
-                          borderRadius: "8px",
-                          fontWeight: "bold",
-                          cursor: "pointer",
-                          fontSize: "1rem"
-                        }}
-                      >
-                        + Créer un projet
-                      </button>
-                    )
-                  }
-                </div>
-                {/* Modal centré pour création projet */}
-                {showCreate && (
-                  <div
-                    className="modal-overlay"
-                    style={{
-                      position: "fixed",
-                      top: 0,
-                      left: 0,
-                      width: "100vw",
-                      height: "100vh",
-                      background: "rgba(0,0,0,0.3)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      zIndex: 1000
-                    }}
-                    onClick={() => setShowCreate(false)}
-                  >
-                    <div
-                      className="modal-content"
-                      style={{
-                        background: "#fff",
-                        padding: "32px",
-                        borderRadius: "12px",
-                        boxShadow: "0 2px 16px rgba(0,0,0,0.15)",
-                        minWidth: "350px",
-                        minHeight: "120px",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "16px"
-                      }}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <h4 style={{ margin: 0, fontWeight: "bold", color: "#222" }}>Créer un projet</h4>
-                      <input
-                        type="text"
-                        placeholder="Nom du projet"
-                        value={newProjectName}
-                        onChange={e => setNewProjectName(e.target.value)}
-                        style={{
-                          padding: "8px",
                           borderRadius: "4px",
-                          border: "1px solid #ccc"
-                        }}
-                      />
-                      <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-                        <button
-                          onClick={handleCreateProject}
-                          style={{
-                            background: "#198754",
-                            color: "#fff",
-                            border: "none",
-                            padding: "8px 16px",
-                            borderRadius: "4px",
-                            fontWeight: "bold",
-                            cursor: "pointer"
-                          }}
-                        >
-                          Créer
-                        </button>
-                        <button
-                          onClick={() => setShowCreate(false)}
-                          style={{
-                            background: "#dc3545",
-                            color: "#fff",
-                            border: "none",
-                            padding: "8px 16px",
-                            borderRadius: "4px",
-                            fontWeight: "bold",
-                            cursor: "pointer"
-                          }}
-                        >
-                          Annuler
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <ul className="projects-list" style={{ marginTop: "16px" }}>
-                  {!group ? (
-                    <li>Chargement...</li>
-                  ) : loading ? (
-                    <li>Chargement...</li>
-                  ) : projects.length === 0 ? (
-                    <li>Aucun projet dans ce groupe.</li>
-                  ) : (
-                    projects.map(proj => (
-                      <li
-                        key={proj.id}
-                        className="project-item"
-                        style={{
-                          background: "#222",
-                          color: "#fff",
-                          borderRadius: "8px",
-                          padding: "18px 24px",
-                          marginBottom: "12px",
                           fontWeight: "bold",
-                          fontSize: "1.1rem",
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                          cursor: "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between"
+                          cursor: "pointer"
                         }}
                       >
-                        <span onClick={() => handleProjectClick(proj)} style={{ flex: 1 }}>
-                          {proj.name}
-                        </span>
-                        {group?.role && group.role.toLowerCase().includes("manager") && (
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              setDeleteProjectId(proj.id);
-                            }}
-                            style={{
-                              background: "transparent",
-                              border: "none",
-                              marginLeft: "16px",
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center"
-                            }}
-                            title="Supprimer le projet"
-                          >
-                            <FaTrash color="#fff" size={18} />
-                          </button>
-                        )}
-                      </li>
-                    ))
-                  )}
-                </ul>
-                {/* Modal de confirmation suppression */}
-                {deleteProjectId !== null && (
-                  <div
-                    style={{
-                      position: "fixed",
-                      top: 0,
-                      left: 0,
-                      width: "100vw",
-                      height: "100vh",
-                      background: "rgba(0,0,0,0.3)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      zIndex: 1000
-                    }}
-                    onClick={() => setDeleteProjectId(null)}
-                  >
-                    <div
-                      style={{
-                        background: "#fff",
-                        padding: "32px",
-                        borderRadius: "12px",
-                        boxShadow: "0 2px 16px rgba(0,0,0,0.15)",
-                        minWidth: "350px",
-                        minHeight: "120px",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "16px"
-                      }}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <h4 style={{ margin: 0, fontWeight: "bold", color: "#222" }}>Confirmer la suppression</h4>
-                      <div>Voulez-vous vraiment supprimer ce projet ?</div>
-                      <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-                        <button
-                          onClick={() => handleDeleteProject(deleteProjectId)}
-                          style={{
-                            background: "#dc3545",
-                            color: "#fff",
-                            border: "none",
-                            padding: "8px 16px",
-                            borderRadius: "4px",
-                            fontWeight: "bold",
-                            cursor: "pointer"
-                          }}
-                        >
-                          Oui, supprimer
-                        </button>
-                        <button
-                          onClick={() => setDeleteProjectId(null)}
-                          style={{
-                            background: "#222",
-                            color: "#fff",
-                            border: "none",
-                            padding: "8px 16px",
-                            borderRadius: "4px",
-                            fontWeight: "bold",
-                            cursor: "pointer"
-                          }}
-                        >
-                          Annuler
-                        </button>
-                      </div>
+                        Annuler
+                      </button>
                     </div>
                   </div>
-                )}
-              </div>
-              <div className="members-section" style={{
-                flex: 1,
-                background: "#fff",
-                borderRadius: "16px",
-                boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
-                padding: "32px",
-                minHeight: "340px"
-              }}>
-                <h3 style={{ fontWeight: "bold", fontSize: "1.2rem", color: "#222", marginBottom: "24px" }}>Membres du groupe</h3>
-                <ul className="members-list">
-                  {!group ? (
-                    <li>Chargement...</li>
-                  ) : loading ? (
-                    <li>Chargement...</li>
-                  ) : members.length === 0 ? (
-                    <li>Aucun membre dans ce groupe.</li>
-                  ) : (
-                    members.map((m: any) => (
-                      <li key={m.id} style={{
-                        background: "#f5f6fa",
-                        borderRadius: "8px",
-                        padding: "12px 18px",
-                        marginBottom: "10px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
+                </div>
+              )}
+            </div>
+            <div className="members-section" style={{
+              flex: 1,
+              background: "#fff",
+              borderRadius: "16px",
+              boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
+              padding: "32px",
+              minHeight: "340px"
+            }}>
+              <h3 style={{ fontWeight: "bold", fontSize: "1.2rem", color: "#222", marginBottom: "24px" }}>Membres du groupe</h3>
+              <ul className="members-list">
+                {!group ? (
+                  <li>Chargement...</li>
+                ) : loading ? (
+                  <li>Chargement...</li>
+                ) : members.length === 0 ? (
+                  <li>Aucun membre dans ce groupe.</li>
+                ) : (
+                  members.map((m: any) => (
+                    <li key={m.id} style={{
+                      background: "#f5f6fa",
+                      borderRadius: "8px",
+                      padding: "12px 18px",
+                      marginBottom: "10px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      fontWeight: "bold",
+                      color: "#222"
+                    }}>
+                      <span>
+                        {m.username}
+                        {m.name && ` (${m.name})`}
+                        {m.email && ` - ${m.email}`}
+                      </span>
+                      <span className="role" style={{
+                        background: "#222",
+                        color: "#fff",
+                        borderRadius: "6px",
+                        padding: "4px 12px",
                         fontWeight: "bold",
-                        color: "#222"
-                      }}>
-                        <span>
-                          {m.username}
-                          {m.name && ` (${m.name})`}
-                          {m.email && ` - ${m.email}`}
-                        </span>
-                        <span className="role" style={{
-                          background: "#222",
-                          color: "#fff",
-                          borderRadius: "6px",
-                          padding: "4px 12px",
-                          fontWeight: "bold",
-                          fontSize: "0.95rem"
-                        }}>{m.role}</span>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-            </>
-          )}
+                        fontSize: "0.95rem"
+                      }}>{m.role}</span>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+          </>
+        )}
         </section>
-      </main>
-    </div>
-);
+      </main >
+    </div >
+  );
 }
 
 export default GestionProjet;

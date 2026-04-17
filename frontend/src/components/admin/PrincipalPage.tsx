@@ -12,17 +12,30 @@ const PrincipalPage = () => {
       </div>
       <div className="principal-box">
         <h1>Page Principale Admin</h1>
-        
-                
+
+
         <button className="principal-btn" onClick={() => navigate('/gestion-utilisateurs')}>
-          Gestion des utilisateurs
+          Gestion des Utilisateurs
         </button>
 
-         <button className="principal-btn" onClick={() => navigate('/tickets')}>
-          Gestion des tickets
-        </button> 
+        <button className="principal-btn" onClick={() => navigate('/tickets')}>
+          Gestion des Tickets
+        </button>
 
-       
+        <button className="principal-btn" onClick={() => navigate('/quotas')}>
+          Gestion des Quotas
+        </button>
+
+        <button className="principal-btn" onClick={() => navigate('/fichiersAd')}>
+          Gestion des Fichiers
+        </button>
+
+        <button className="principal-btn" onClick={() => navigate('/notifications')}>
+          Gestion des Notifications
+        </button>
+
+
+
       </div>
     </div>
   );

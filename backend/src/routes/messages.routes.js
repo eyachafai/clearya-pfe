@@ -4,16 +4,20 @@ const axios = require('axios');
 const pool = require('../config/db');
 require('dotenv').config({ path: '../.env' });
 const { keycloak } = require('../config/keycloak.config');
-const { Conversation, Message, Groupe, Utilisateur} = require('../models');
-const {FileChunk}=require('../models/FileChunk')
+const { Conversation, Message, Groupe, Utilisateur } = require('../models');
+const { FileChunk } = require('../models/FileChunk')
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() }); // stocke en mémoire pour concaténation rapide
 const fs = require('fs');
 const path = require('path');
 const md5 = require('md5');
 const File = require('../models/Files');
+const forge = require('node-forge');
+const privateKeyPath = path.join(__dirname, '../keys/private.pem');
+const PRIVATE_KEY = fs.readFileSync(privateKeyPath, 'utf8');
 const uploadsDir = path.join(__dirname, '../../uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+
 
 // Créer une conversation pour un groupe (si elle n'existe pas déjà)
 router.post('/conversations', async (req, res) => {
@@ -68,9 +72,29 @@ router.post('/messages', async (req, res) => {
       conversation_id,
       utilisateur_id,
       contenu,
-      type: type || 'text'
+      type: type || 'text',
+      encryptedMessageData: req.body.encryptedMessageData || null,
+      encryptedAESKeyData: req.body.encryptedAESKeyData || null
     });
     console.log("Message enregistré :", msg.id);
+
+    // Récupère la conversation pour le groupe_id
+    const convNotif = conv; // Utilise la variable déjà récupérée plus haut
+    console.log("Conversation trouvée:", convNotif);
+    if (ioInstance) {
+      const notif = {
+        titre: "Nouveau message",
+        message: contenu,
+        date: new Date(),
+        auteur: { id: user.id, username: user.username, email: user.email }
+      };
+      console.log("[SOCKET] Emission notification dans room_groupe_", convNotif?.groupe_id, notif);
+      ioInstance.to(`room_groupe_${convNotif?.groupe_id}`).emit("notification", notif);
+      console.log("[SOCKET] Notification émise dans room_groupe_", convNotif?.groupe_id);
+    } else {
+      console.log("[SOCKET] ioInstance non défini");
+    }
+
     res.status(201).json(msg);
   } catch (err) {
     console.error('Erreur envoi message:', err);
@@ -113,7 +137,7 @@ let ioInstance = null;
 function setSocketIo(io) {
   ioInstance = io;
 }
-router.setSocketIo = setSocketIo; 
+router.setSocketIo = setSocketIo;
 
 // Nouvelle route API pour envoyer un message en temps réel (front → API → axios → backend socket → API → front)
 router.post('/messages/realtime', async (req, res) => {
@@ -253,5 +277,93 @@ router.use('/uploads', (req, res, next) => {
   console.log('Requête reçue sur /uploads:', req.url);
   next();
 });
+
+
+
+/*
+
+router.post('/decrypt', async (req, res) => {
+  console.log("🔓 Décryptage reçu:", req.body);
+
+  try {
+    const decryptedMessage = "TEXTE DECRYPTÉ"; // <-- ici ton vrai décryptage RSA/AES
+    res.json({ decryptedMessage });
+  } catch (error) {
+    console.error("Erreur décryptage :", error);
+    res.status(500).json({ error: "Erreur interne" });
+  }
+});
+
+
+// backend/routes/messages.js
+router.post('/decryption/decrypt', (req, res) => {
+  const { encryptedAESKey, encryptedMessageData } = req.body;
+
+  try {
+    const privateKey = forge.pki.privateKeyFromPem(PRIVATE_KEY);
+    const aesKey = privateKey.decrypt(forge.util.decode64(encryptedAESKey), 'RSA-OAEP');
+
+    const encrypted = JSON.parse(encryptedMessageData);
+    const iv = forge.util.hexToBytes(encrypted.iv);
+    const cipherBytes = forge.util.decode64(encrypted.ciphertext);
+
+    const decipher = forge.cipher.createDecipher('AES-CBC', aesKey);
+    decipher.start({ iv });
+    decipher.update(forge.util.createBuffer(cipherBytes));
+    decipher.finish();
+
+    res.json({ decryptedMessage: decipher.output.toString() });
+  } catch (err) {
+    res.status(500).json({ error: "Decryption failed" });
+  }
+});
+
+
+exports.decryptMessage = async (req, res) => {
+  try {
+    const { encryptedAESKey, encryptedMessageData } = req.body;
+
+    console.log("=== DATA REÇUES ===");
+    console.log({ encryptedAESKey, encryptedMessageData });
+
+    // ici tu peux tester avec un texte fixe pour vérifier
+    return res.json({ decryptedMessage: "TEST DECRYPT OK" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Decryption failed" });
+  }
+};*/
+
+// === TEST DECRYPT — FONCTIONNE TOUJOURS ===
+router.post('/decryption/decrypt', (req, res) => {
+  try {
+    const { encryptedAESKey, encryptedMessageData } = req.body;
+    if (!encryptedAESKey || !encryptedMessageData) {
+      return res.status(400).json({ error: 'Missing fields' });
+    }
+    const privateKey = forge.pki.privateKeyFromPem(PRIVATE_KEY);
+    const aesKeyBytes = privateKey.decrypt(
+      forge.util.decode64(encryptedAESKey),
+      'RSA-OAEP'
+    );
+    const encrypted = JSON.parse(encryptedMessageData);
+    const ivBytes = forge.util.hexToBytes(encrypted.iv);
+    const cipherBytes = forge.util.decode64(encrypted.ciphertext);
+    const decipher = forge.cipher.createDecipher('AES-CBC', aesKeyBytes);
+    decipher.start({ iv: ivBytes });
+    decipher.update(forge.util.createBuffer(cipherBytes, 'raw'));
+    const success = decipher.finish();
+    if (!success) {
+      throw new Error('AES decryption failed');
+    }
+    const decryptedMessage = decipher.output.toString('utf8');
+    return res.json({ decryptedMessage });
+  } catch (error) {
+    console.error('Error during decryption:', error);
+    return res.status(500).json({ error: 'Decryption failed', details: error.message });
+  }
+});
+
+
 
 module.exports = router;

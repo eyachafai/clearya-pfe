@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useKeycloak } from '@react-keycloak/web';
-import { FaEdit, FaSignOutAlt } from 'react-icons/fa';
+import { FaEdit, FaSignOutAlt, FaBell } from 'react-icons/fa';
 import './Profile.css';
 
 const Profile = () => {
@@ -69,6 +69,12 @@ const Profile = () => {
             <p>{user?.email}</p>
           </div>
           <div className="profile-actions">
+            <FaBell
+              className="icon"
+              title="Voir les notifications"
+              style={{ marginRight: 12, color: '#8cb6d5ff', cursor: 'pointer' }}
+              onClick={() => navigate('/notifications-user')}
+            />
             <FaEdit
               className="icon"
               title="Modifier le profil"

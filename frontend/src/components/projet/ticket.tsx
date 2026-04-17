@@ -3,14 +3,16 @@ import { Ticket } from "../../types/ticket";
 import { Member } from "../../types/membre";
 import { useKeycloak } from '@react-keycloak/web';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { useCurrentUserId } from "../../hooks/useCurrentUserId";
+import { socket } from "../../socket";
 
 
-const TicketPage = ({ currentUserId: initialCurrentUserId, allMembers, projetId }: {
-  currentUserId: number | null;
+
+const TicketPage = ({ allMembers }: {
   allMembers: Member[];
-  projetId?: number;
+  //projetId?: number;
 }) => {
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+    const [tickets, setTickets] = useState<Ticket[]>([]);
   const [etatOptions, setEtatOptions] = useState<string[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [titre, setTitre] = useState("");
@@ -20,20 +22,19 @@ const TicketPage = ({ currentUserId: initialCurrentUserId, allMembers, projetId 
   const [filterAssignee, setFilterAssignee] = useState<number | "">("");
   const [showTicketsPage, setShowTicketsPage] = useState(true);
   const { keycloak } = useKeycloak();
-  const [currentUserId, setCurrentUserId] = useState<number | null>(initialCurrentUserId);
   const [showStatsPage, setShowStatsPage] = useState(false);
   const [editTicketId, setEditTicketId] = useState<number | null>(null);
   const [editTitre, setEditTitre] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editAssignee, setEditAssignee] = useState<number | "">("");
 
-  console.log('Props received:', { currentUserId: initialCurrentUserId, allMembers, projetId });
+  console.log('Props received:', { allMembers });
   console.log('Keycloak tokenParsed:', keycloak?.tokenParsed);
   console.log('Detailed Keycloak tokenParsed:', keycloak?.tokenParsed);
   const isManager = keycloak?.tokenParsed?.realm_access?.roles?.includes('manager') || keycloak?.tokenParsed?.resource_access?.myapp?.roles?.includes('manager') || false;
   console.log('isManager:', isManager);
 
-  useEffect(() => {
+ /* useEffect(() => {
     if (!currentUserId) {
       const userIdFromStorage = Number(localStorage.getItem('utilisateur_id'));
       const userIdFromKeycloak = keycloak?.tokenParsed?.sub;
@@ -60,7 +61,9 @@ const TicketPage = ({ currentUserId: initialCurrentUserId, allMembers, projetId 
         console.warn('Unable to retrieve currentUserId');
       }
     }
-  }, [keycloak, currentUserId]);
+  }, [keycloak, currentUserId]);*/
+  const currentUserId = useCurrentUserId();
+
 
   useEffect(() => {
     // Charger la liste des états
@@ -155,17 +158,24 @@ const TicketPage = ({ currentUserId: initialCurrentUserId, allMembers, projetId 
   const handleEtatChange = async (ticket: Ticket, newEtat: string) => {
     if (!etatOptions.includes(newEtat)) return;
     try {
-      await fetch(`/api/tickets/${ticket.id}`, {
-        method: "PUT",
+      console.log('[FRONT] PATCH ticket etat:', { ticketId: ticket.id, newEtat, currentUserId });
+      const response = await fetch(`/api/tickets/${ticket.id}/etat`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ etat: newEtat }),
+        body: JSON.stringify({ etat: newEtat, utilisateur_id: currentUserId }),
       });
+      const result = await response.json();
+      console.log('[FRONT] PATCH ticket etat response:', result);
+      // Re-authenticate socket to ensure notifications
+      if (localStorage.getItem('utilisateur_id')) {
+        socket.emit('authenticate', { userId: localStorage.getItem('utilisateur_id') });
+      }
       // Optimistic update
       setTickets((prev) =>
         prev.map((t) => (t.id === ticket.id ? { ...t, etat: newEtat } : t))
       );
     } catch (err) {
-      console.error('Erreur mise à jour état du ticket:', err);
+      console.error('[FRONT] Erreur mise à jour état du ticket:', err);
       alert('Erreur lors de la mise à jour de l\'état du ticket');
     }
   };
@@ -368,6 +378,10 @@ const TicketPage = ({ currentUserId: initialCurrentUserId, allMembers, projetId 
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify(payload),
                                 });
+                                // Re-authenticate socket to ensure notifications
+                                if (localStorage.getItem('utilisateur_id')) {
+                                  socket.emit('authenticate', { userId: localStorage.getItem('utilisateur_id') });
+                                }
                                 setEditTicketId(null);
                                 const res = await fetch("/api/tickets");
                                 setTickets(res.ok ? await res.json() : []);
