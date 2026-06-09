@@ -9,6 +9,8 @@ router.patch('/tickets/:id/etat', async (req, res) => {
   const { etat, utilisateur_id } = req.body;
   console.log('PATCH request:', { id, etat, utilisateur_id });
 
+
+  
   const allowedEtats = ["nouveau", "en cours", "resolu", "ferme"];
   if (!allowedEtats.includes(etat)) {
     console.log('Etat invalide:', etat);

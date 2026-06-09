@@ -411,25 +411,40 @@ router.get('/taches/etats', (req, res) => {
 
 // GET /api/tickets?assignee_id=...&etat=...
 router.get('/tickets', async (req, res) => {
-  const { assignee_id, etat } = req.query;
+  const { assignee_id, etat, user_id, role } = req.query;
+
   const where = {};
-  if (assignee_id) where.assignee_id = assignee_id;
+
   if (etat) where.etat = etat;
-  try {
-    const tickets = await Ticket.findAll({
-      where,
-      include: [
-        { model: Utilisateur, as: 'assignee', attributes: ['id', 'username', 'email'] },
-        { model: Utilisateur, as: 'creator', attributes: ['id', 'username', 'email'] }
-      ],
-      order: [['created_at', 'DESC']]
-    });
-    res.json(tickets);
-  } catch (err) {
-    console.error("[API] Erreur récupération tickets:", err); // Ajoute ce log pour debug
-    res.status(500).json({ error: "Erreur récupération tickets", details: err.message });
+
+  // 👇 logique sécurité
+  if (role === "employee") {
+    // employee يشوف كان tickets متاعو
+    where.assignee_id = user_id;
   }
+
+  if (role === "manager") {
+    // manager يشوف tickets متاع department (مثلا حسب groupe_id / projet_id)
+    where.groupe_id = req.query.groupe_id;
+  }
+
+  if (role === "admin") {
+    // admin يشوف الكل → ما نعملو حتى filter إضافي
+  }
+
+  if (assignee_id) where.assignee_id = assignee_id;
+
+  const tickets = await Ticket.findAll({
+    where,
+    include: [
+      { model: Utilisateur, as: 'assignee' },
+      { model: Utilisateur, as: 'creator' }
+    ]
+  });
+
+  res.json(tickets);
 });
+
 
 // GET /api/tickets/:id
 router.get('/tickets/:id', async (req, res) => {

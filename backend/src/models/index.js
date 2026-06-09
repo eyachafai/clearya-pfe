@@ -1,60 +1,143 @@
-const JournalConnexion = require("./JournalConnexion");
-const Utilisateur = require("./Utilisateur");
-const Departement = require("./Departement");
-const Groupe = require('./Groupe');
-const GroupeUtilisateur = require('./GroupeUtilisateur');
-const Conversation = require('./Conversation');
-const Message = require('./Message');
-const Projet = require('./projet');
-const ProjetMembre = require('./ProjetMembre');
-const Tache = require('./tache');
-const Ticket = require('./ticket');
 const sequelize = require('../config/db');
 const { DataTypes } = require('sequelize');
-const Rapport = require('./rapport')(sequelize, DataTypes);
-const Quota = require('./quota');
-const Files = require('./Files');
-const Notifications = require('./Notifications');
-const files = require("./Files");
+
+const db = {};
+
+// =====================
+// IMPORT DES MODÈLES
+// =====================
+db.JournalConnexion = require("./JournalConnexion");
+db.Utilisateur = require("./Utilisateur");
+db.Departement = require("./Departement");
+db.Groupe = require('./Groupe');
+db.GroupeUtilisateur = require('./GroupeUtilisateur');
+db.Conversation = require('./Conversation');
+db.Message = require('./Message');
+db.Projet = require('./projet');
+db.ProjetMembre = require('./ProjetMembre');
+db.Tache = require('./tache');
+db.Ticket = require('./ticket');
+db.Quota = require('./quota');
+db.Files = require('./Files');
+db.Notifications = require('./Notifications');
+
+// ⚠️ modèles avec sequelize (IMPORTANT)
+db.Rapport = require('./rapport')(sequelize, DataTypes);
+db.UserECDHKey = require('./UserECDHKey')(sequelize);
+db.GroupKey = require('./GroupKey')(sequelize);
+
+// =====================
+// ASSOCIATIONS
+// =====================
+
+// Quota <-> Utilisateur
+db.Quota.belongsTo(db.Utilisateur, { foreignKey: 'user_id', as: 'utilisateur' });
+db.Utilisateur.hasOne(db.Quota, { foreignKey: 'user_id', as: 'quota' });
 
 
-// Association Quota <-> Utilisateur
-Quota.belongsTo(Utilisateur, { foreignKey: 'user_id', as: 'utilisateur' });
-Utilisateur.hasOne(Quota, { foreignKey: 'user_id', as: 'quota' });
+// Groupe <-> Utilisateur
+db.Groupe.belongsToMany(db.Utilisateur, {
+  through: db.GroupeUtilisateur,
+  foreignKey: 'groupe_id',
+  otherKey: 'utilisateur_id',
+  as: 'membres'
+});
 
-// Associations pour les groupes et utilisateurs
-Groupe.belongsToMany(Utilisateur, { through: GroupeUtilisateur, foreignKey: 'groupe_id', otherKey: 'utilisateur_id', as: 'membres' });
-Utilisateur.belongsToMany(Groupe, { through: GroupeUtilisateur, foreignKey: 'utilisateur_id', otherKey: 'groupe_id', as: 'groupes' });
+db.Utilisateur.belongsToMany(db.Groupe, {
+  through: db.GroupeUtilisateur,
+  foreignKey: 'utilisateur_id',
+  otherKey: 'groupe_id',
+  as: 'groupes'
+});
 
-// Associations pour la messagerie et groupes
-Groupe.hasMany(GroupeUtilisateur, { foreignKey: 'groupe_id', as: 'groupeUtilisateurs' });
-GroupeUtilisateur.belongsTo(Groupe, { foreignKey: 'groupe_id', as: 'groupe' });
+// GroupeUtilisateur
+db.Groupe.hasMany(db.GroupeUtilisateur, {
+  foreignKey: 'groupe_id',
+  as: 'groupeUtilisateurs'
+});
 
-// Associations pour la messagerie (pour include dans les requêtes)
-Message.belongsTo(Utilisateur, { foreignKey: 'utilisateur_id', as: 'utilisateur' });
-Message.belongsTo(Conversation, { foreignKey: 'conversation_id', as: 'conversation' });
-Conversation.belongsTo(Groupe, { foreignKey: 'groupe_id', as: 'groupe' });
-Rapport.belongsTo(Projet, { foreignKey: 'projet_id', as: 'projet' });
-Projet.hasMany(Rapport, { foreignKey: 'projet_id', as: 'rapports' });
+db.GroupeUtilisateur.belongsTo(db.Groupe, {
+  foreignKey: 'groupe_id',
+  as: 'groupe'
+});
 
-// Association Notifications <-> Utilisateur (auteur de la notification)
-Notifications.belongsTo(Utilisateur, { foreignKey: 'envoye_par', as: 'auteur' });
-Utilisateur.hasMany(Notifications, { foreignKey: 'envoye_par', as: 'notificationsEnvoyees' });
+// Messagerie
+db.Message.belongsTo(db.Utilisateur, {
+  foreignKey: 'utilisateur_id',
+  as: 'utilisateur'
+});
 
-module.exports = {
-  JournalConnexion,
-  Utilisateur,
-  Departement,
-  Groupe,
-  GroupeUtilisateur,
-  Conversation,
-  Message,
-  Projet,
-  ProjetMembre,
-  Tache,
-  Ticket,
-  Rapport,
-  Quota,
-  files,
-  Notifications,
-};
+db.Message.belongsTo(db.Conversation, {
+  foreignKey: 'conversation_id',
+  as: 'conversation'
+});
+
+db.Conversation.belongsTo(db.Groupe, {
+  foreignKey: 'groupe_id',
+  as: 'groupe'
+});
+
+// Rapport
+db.Rapport.belongsTo(db.Projet, {
+  foreignKey: 'projet_id',
+  as: 'projet'
+});
+
+db.Projet.hasMany(db.Rapport, {
+  foreignKey: 'projet_id',
+  as: 'rapports'
+});
+
+// Notifications
+db.Notifications.belongsTo(db.Utilisateur, {
+  foreignKey: 'envoye_par',
+  as: 'auteur'
+});
+
+db.Utilisateur.hasMany(db.Notifications, {
+  foreignKey: 'envoye_par',
+  as: 'notificationsEnvoyees'
+});
+
+// =====================
+// 🔐 E2EE ASSOCIATIONS
+// =====================
+
+// User ECDH Key
+db.UserECDHKey.belongsTo(db.Utilisateur, {
+  foreignKey: 'user_id',
+  as: 'utilisateur'
+});
+
+db.Utilisateur.hasOne(db.UserECDHKey, {
+  foreignKey: 'user_id',
+  as: 'ecdhKey'
+});
+
+// Group Key
+db.GroupKey.belongsTo(db.Utilisateur, {
+  foreignKey: 'user_id',
+  as: 'utilisateur'
+});
+
+db.GroupKey.belongsTo(db.Groupe, {
+  foreignKey: 'group_id',
+  as: 'groupe'
+});
+
+db.Utilisateur.hasMany(db.GroupKey, {
+  foreignKey: 'user_id',
+  as: 'groupKeys'
+});
+
+db.Groupe.hasMany(db.GroupKey, {
+  foreignKey: 'group_id',
+  as: 'groupKeys'
+});
+
+// =====================
+// EXPORT
+// =====================
+db.sequelize = sequelize;
+
+module.exports = db;

@@ -1,15 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
 import dayjs from "dayjs";
 import { FaBellSlash } from 'react-icons/fa';
-
-const socket = io("http://localhost:5000");
 
 const NotificationsUser = () => {
     const [notifications, setNotifications] = useState<any[]>([]);
     const [toast, setToast] = useState<any | null>(null);
     const [activeTab, setActiveTab] = useState<'today' | 'week' | 'earlier'>('today');
     const [disabled, setDisabled] = useState(() => localStorage.getItem('notifications_disabled') === 'true');
+    const socketRef = useRef<any | null>(null);
+    const disabledRef = useRef<boolean>(disabled);
+    const timeoutRef = useRef<number | null>(null);
+    const originalNotificationRef = useRef<any | null>(null);
 
     // Récupère les notifications existantes au chargement
     useEffect(() => {
@@ -18,24 +20,142 @@ const NotificationsUser = () => {
             .then(data => setNotifications(Array.isArray(data) ? data : []));
     }, []);
 
-    // Écoute les notifications en temps réel
+    // keep disabledRef up to date with state
     useEffect(() => {
-        if (disabled) return;
-        socket.on("notification", notif => {
-            setNotifications(prev => [notif, ...prev]);
-            setToast(notif);
-            setTimeout(() => setToast(null), 5000); // cache le toast après 5s
-        });
-        return () => {
-            socket.off("notification");
-        };
+        disabledRef.current = disabled;
     }, [disabled]);
+
+    // When notifications are disabled, immediately hide any shown toast and clear its timer
+    useEffect(() => {
+        if (disabled) {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+            }
+            setToast(null);
+        }
+    }, [disabled]);
+
+    // Écoute les notifications en temps réel : on connecte une fois au montage et on garde
+    // la connexion tant que le composant est monté. Toujours sauvegarder la notif, mais
+    // n'afficher le toast que si disabled === false (contrôlé via disabledRef).
+    useEffect(() => {
+        socketRef.current = io("http://localhost:5000");
+        const s = socketRef.current;
+
+        s.on("notification", (notif: any) => {
+            // Toujours sauvegarder la notification
+            setNotifications(prev => [notif, ...prev]);
+            // N'afficher le toast que si les notifications sont activées
+            if (!disabledRef.current) {
+                setToast(notif);
+                // store timer id so we can clear it if the user disables notifications
+                timeoutRef.current = window.setTimeout(() => {
+                    setToast(null);
+                    timeoutRef.current = null;
+                }, 5000);
+            }
+        });
+
+        return () => {
+            if (s) {
+                s.off("notification");
+                s.disconnect();
+            }
+            // cleanup any pending toast timer
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+            }
+            socketRef.current = null;
+        };
+    }, []);
+
+    // Override window.Notification while this component is mounted so that calls to
+    // new Notification(...) respect the user's localStorage 'notifications_disabled' flag.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        originalNotificationRef.current = (window as any).Notification;
+
+        const GuardedNotification: any = function(title: string, options?: NotificationOptions) {
+            try {
+                if (localStorage.getItem('notifications_disabled') === 'true') {
+                    // Suppress creation of native notification
+                    return undefined;
+                }
+            } catch (e) {
+                // ignore localStorage errors
+            }
+            return new originalNotificationRef.current(title, options);
+        };
+
+        // preserve static members
+        GuardedNotification.requestPermission = (...args: any[]) => originalNotificationRef.current.requestPermission(...args);
+        Object.defineProperty(GuardedNotification, 'permission', {
+            get: () => originalNotificationRef.current.permission
+        });
+
+        (window as any).Notification = GuardedNotification;
+
+        // inform service worker about current preference if available
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({ type: 'SET_NOTIFICATIONS_DISABLED', value: disabled });
+        }
+
+        return () => {
+            // restore original Notification constructor
+            if (originalNotificationRef.current) {
+                (window as any).Notification = originalNotificationRef.current;
+            }
+            // also notify service worker on unmount
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({ type: 'SET_NOTIFICATIONS_DISABLED', value: false });
+            }
+        };
+    }, []);
 
     // Quand l'utilisateur clique sur l'icône, on synchronise avec le localStorage
     const handleToggleNotifications = () => {
         const newValue = !disabled;
+        // update ref immediately to prevent race with incoming socket events
+        disabledRef.current = newValue;
+        // if disabling, clear any visible toast and its timer right away
+        if (newValue) {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+            }
+            setToast(null);
+        }
         setDisabled(newValue);
         localStorage.setItem('notifications_disabled', String(newValue));
+        
+        // Dispatch storage event to notify other listeners (like NotificationsListener)
+        window.dispatchEvent(new StorageEvent('storage', {
+            key: 'notifications_disabled',
+            newValue: String(newValue),
+            oldValue: String(!newValue),
+            storageArea: localStorage
+        }));
+        
+        // Sync with backend
+        const userId = localStorage.getItem('utilisateur_id');
+        if (userId) {
+            fetch(`http://localhost:5000/api/notifications/toggle-status/${userId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ disabled: newValue })
+            }).catch(err => console.error('[NOTIF] Erreur sync backend:', err));
+        }
+        
+        // notify a possible service worker so it can suppress notifications coming from push events
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            try {
+                navigator.serviceWorker.controller.postMessage({ type: 'SET_NOTIFICATIONS_DISABLED', value: newValue });
+            } catch (e) {
+                // ignore
+            }
+        }
     };
 
     // Filtrage par date
@@ -65,15 +185,7 @@ const NotificationsUser = () => {
                     <button onClick={() => setActiveTab('earlier')} style={{ flex: 1, background: 'none', border: 'none', borderBottom: activeTab === 'earlier' ? '3px solid #8cb6d5' : 'none', color: activeTab === 'earlier' ? '#232323' : '#bfc7d5', fontWeight: 700, fontSize: 16, padding: '12px 0', cursor: 'pointer' }}>Antérieures</button>
                 </div>
                 <div style={{ padding: '0 28px', marginTop: 8 }}>
-                    {toast && (
-                        <div style={{
-                            position: 'fixed', top: 60, right: 60, zIndex: 9999,
-                            background: '#198754', color: '#fff', padding: 18, borderRadius: 10, boxShadow: '0 2px 12px #0002', minWidth: 250
-                        }}>
-                            <div style={{ fontWeight: 'bold', fontSize: 30 }}>{toast.titre}</div>
-                            <div style={{ marginTop: 6 }}>{toast.message}</div>
-                        </div>
-                    )}
+                    
                     {activeTab === 'today' && (
                         todayList.length === 0 ? (
                             <div style={{ color: '#888', fontSize: 16, textAlign: 'center', margin: '48px 0' }}>Aucune notification aujourd'hui.</div>

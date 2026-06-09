@@ -49,11 +49,22 @@ router.post('/conversations', async (req, res) => {
 router.post('/messages', async (req, res) => {
   console.log("Body received:", req.body);
   // Vérifie que le body contient bien les champs attendus
-  const { conversation_id, utilisateur_id, contenu, type } = req.body;
-  if (!conversation_id || !utilisateur_id || !contenu) {
+  // Supporte 2 formats:
+  // 1. Format ancien: contenu (texte en clair)
+  // 2. Format chiffré: ciphertext + iv (message chiffré AES)
+  const { conversation_id, utilisateur_id, contenu, ciphertext, iv, type } = req.body;
+  
+  if (!conversation_id || !utilisateur_id) {
     console.error("Paramètres manquants :", req.body);
-    return res.status(400).json({ error: "Paramètres manquants" });
+    return res.status(400).json({ error: "Paramètres manquants: conversation_id et utilisateur_id requis" });
   }
+
+  // Vérifie qu'on a soit contenu soit ciphertext+iv
+  if (!contenu && (!ciphertext || !iv)) {
+    console.error("Paramètres manquants :", req.body);
+    return res.status(400).json({ error: "Paramètres manquants: contenu OU (ciphertext + iv) requis" });
+  }
+
   try {
     // Vérifie que la conversation existe
     const conv = await Conversation.findByPk(conversation_id);
@@ -67,24 +78,34 @@ router.post('/messages', async (req, res) => {
       console.error("Utilisateur non trouvé :", utilisateur_id);
       return res.status(404).json({ error: "Utilisateur non trouvé" });
     }
-    // Enregistre le message dans la DB locale
+
+    // 🔐 IMPORTANT: Enregistre le message chiffré correctement
+    console.log("📝 Enregistrement du message:");
+    console.log("   - ciphertext:", ciphertext ? `${ciphertext.substring(0, 30)}...` : "null");
+    console.log("   - iv:", iv ? `${iv.substring(0, 30)}...` : "null");
+    
     const msg = await Message.create({
       conversation_id,
       utilisateur_id,
-      contenu,
+      contenu: contenu || `[chiffré]`, // Si message chiffré, on met un placeholder
       type: type || 'text',
+      ciphertext: ciphertext || null,  // ✅ IMPORTANT: Enregistre le vrai ciphertext
+      iv: iv || null,                   // ✅ IMPORTANT: Enregistre le vrai iv
       encryptedMessageData: req.body.encryptedMessageData || null,
       encryptedAESKeyData: req.body.encryptedAESKeyData || null
     });
-    console.log("Message enregistré :", msg.id);
+    console.log("✅ Message enregistré en BD:");
+    console.log("   - ID:", msg.id);
+    console.log("   - ciphertext en BD:", msg.ciphertext ? `${msg.ciphertext.substring(0, 30)}...` : "null");
+    console.log("   - iv en BD:", msg.iv ? `${msg.iv.substring(0, 30)}...` : "null");
 
     // Récupère la conversation pour le groupe_id
-    const convNotif = conv; // Utilise la variable déjà récupérée plus haut
+    const convNotif = conv;
     console.log("Conversation trouvée:", convNotif);
     if (ioInstance) {
       const notif = {
         titre: "Nouveau message",
-        message: contenu,
+        message: contenu || "[message chiffré]",
         date: new Date(),
         auteur: { id: user.id, username: user.username, email: user.email }
       };
@@ -148,9 +169,14 @@ router.post('/messages/realtime', async (req, res) => {
     const rep = await axios.post(apiUrl, req.body, { headers: { 'Content-Type': 'application/json' } });
     const msg = rep.data;
 
+    // Récupère la conversation pour émettre sur la bonne room
+    const conv = await Conversation.findByPk(msg.conversation_id);
+    
     // Émet le message sur socket.io à tous les clients connectés
-    if (ioInstance) {
-      ioInstance.emit("receiveMessage", msg);
+    if (ioInstance && conv) {
+      console.log("[SOCKET] Emission receiveMessage pour conversation:", msg.conversation_id);
+      ioInstance.to(`room_${msg.conversation_id}`).emit("receiveMessage", msg);
+      ioInstance.emit("receiveMessage", msg); // fallback pour les autres clients
     }
 
     // Retourne la réponse telle quelle au frontend
@@ -187,9 +213,9 @@ router.get('/conversations/:conversation_id/messages/proxy', async (req, res) =>
   }
 });
 
-// Route to upload file
+// Route to upload file (avec support du chiffrement)
 router.post('/upload', async (req, res) => {
-  const { name, currentChunkIndex, totalChunks, conversation_id, utilisateur_id } = req.query;
+  const { name, currentChunkIndex, totalChunks, conversation_id, utilisateur_id, iv } = req.query;
 
   // Ensure temp directory exists before writing
   const tempDir = path.join(__dirname, '../../temp');
@@ -212,6 +238,9 @@ router.post('/upload', async (req, res) => {
     const finalFilename = md5(Math.random().toString('36')).substring(0, 6) + '.' + fileExtension;
     fs.renameSync(path.join(tempDir, tempFilename), path.join(uploadsDir, finalFilename));
 
+    console.log("✅ Fichier chiffré sauvegardé:", finalFilename);
+    console.log("📝 IV du fichier:", iv);
+
     // Enregistrement du message fichier et émission socket.io si conversation_id et utilisateur_id sont fournis
     let msg = null;
     if (conversation_id && utilisateur_id) {
@@ -219,11 +248,23 @@ router.post('/upload', async (req, res) => {
         conversation_id,
         utilisateur_id,
         contenu: `[file] ${finalFilename}`,
-        type: "file"
+        type: "file",
+        iv: iv || null,  // Stocke l'IV pour le déchiffrement ultérieur
+        ciphertext: "encrypted"  // Marque que c'est chiffré
       });
+
+      console.log("📝 Message fichier enregistré en base, ID:", msg.id);
+      console.log("🔄 Récupération complète du message...");
+      
+      // Récupère le message complet avec utilisateur
+      const fullMsg = await Message.findByPk(msg.id, {
+        include: [{ model: Utilisateur, as: 'utilisateur', attributes: ['id', 'username', 'email'] }]
+      });
+
       if (ioInstance) {
-        ioInstance.to(`room_${conversation_id}`).emit("receiveMessage", msg);
-        ioInstance.emit("receiveMessage", msg); // fallback
+        console.log("📡 Émission socket receiveMessage:", fullMsg);
+        ioInstance.to(`room_${conversation_id}`).emit("receiveMessage", fullMsg);
+        ioInstance.emit("receiveMessage", fullMsg); // fallback
       }
     }
 
@@ -237,27 +278,43 @@ router.post('/upload', async (req, res) => {
   }
 });
 
-// Route pour recevoir un message vocal (audio)
+// Route pour recevoir un message vocal (audio) chiffré
 router.post('/send-audio', upload.single('audio'), async (req, res) => {
   try {
-    const { conversation_id, utilisateur_id } = req.body;
+    const { conversation_id, utilisateur_id, iv } = req.body;
+    
     if (!conversation_id || !utilisateur_id || !req.file) {
       return res.status(400).json({ error: "Paramètres manquants ou fichier audio absent" });
     }
-    // Sauvegarde le fichier audio dans uploads/
+
+    if (!iv) {
+      return res.status(400).json({ error: "IV manquant pour le déchiffrement" });
+    }
+
+    console.log("🎤 Réception audio chiffré, IV:", iv);
+
+    // Sauvegarde le fichier audio chiffré dans uploads/
     const uploadsDir = path.join(__dirname, '../../uploads');
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
-    const audioFilename = `audio_${Date.now()}_${req.file.originalname}`;
+    
+    const audioFilename = `audio_${Date.now()}.enc`;
     const audioPath = path.join(uploadsDir, audioFilename);
     fs.writeFileSync(audioPath, req.file.buffer);
 
+    console.log("✅ Fichier audio chiffré sauvegardé:", audioFilename);
+
     // Enregistre le message dans la base (type audio)
+    // Stocke l'IV en base pour permettre le déchiffrement côté client
     const msg = await Message.create({
       conversation_id,
       utilisateur_id,
       contenu: `[audio] ${audioFilename}`,
-      type: "audio"
+      type: "audio",
+      iv: iv || null,  // Stocke l'IV pour le déchiffrement ultérieur
+      ciphertext: "encrypted"  // Marque que c'est chiffré
     });
+
+    console.log("📝 Message audio enregistré en base, ID:", msg.id);
 
     // Émission socket temps réel
     if (ioInstance) {
@@ -272,7 +329,7 @@ router.post('/send-audio', upload.single('audio'), async (req, res) => {
   }
 });
 
-// Si tu veux juste le log ici pour debug temporaire (pas recommandé en prod) :
+// le log ici juste pour debug temporaire:
 router.use('/uploads', (req, res, next) => {
   console.log('Requête reçue sur /uploads:', req.url);
   next();
@@ -280,59 +337,6 @@ router.use('/uploads', (req, res, next) => {
 
 
 
-/*
-
-router.post('/decrypt', async (req, res) => {
-  console.log("🔓 Décryptage reçu:", req.body);
-
-  try {
-    const decryptedMessage = "TEXTE DECRYPTÉ"; // <-- ici ton vrai décryptage RSA/AES
-    res.json({ decryptedMessage });
-  } catch (error) {
-    console.error("Erreur décryptage :", error);
-    res.status(500).json({ error: "Erreur interne" });
-  }
-});
-
-
-// backend/routes/messages.js
-router.post('/decryption/decrypt', (req, res) => {
-  const { encryptedAESKey, encryptedMessageData } = req.body;
-
-  try {
-    const privateKey = forge.pki.privateKeyFromPem(PRIVATE_KEY);
-    const aesKey = privateKey.decrypt(forge.util.decode64(encryptedAESKey), 'RSA-OAEP');
-
-    const encrypted = JSON.parse(encryptedMessageData);
-    const iv = forge.util.hexToBytes(encrypted.iv);
-    const cipherBytes = forge.util.decode64(encrypted.ciphertext);
-
-    const decipher = forge.cipher.createDecipher('AES-CBC', aesKey);
-    decipher.start({ iv });
-    decipher.update(forge.util.createBuffer(cipherBytes));
-    decipher.finish();
-
-    res.json({ decryptedMessage: decipher.output.toString() });
-  } catch (err) {
-    res.status(500).json({ error: "Decryption failed" });
-  }
-});
-
-
-exports.decryptMessage = async (req, res) => {
-  try {
-    const { encryptedAESKey, encryptedMessageData } = req.body;
-
-    console.log("=== DATA REÇUES ===");
-    console.log({ encryptedAESKey, encryptedMessageData });
-
-    // ici tu peux tester avec un texte fixe pour vérifier
-    return res.json({ decryptedMessage: "TEST DECRYPT OK" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Decryption failed" });
-  }
-};*/
 
 // === TEST DECRYPT — FONCTIONNE TOUJOURS ===
 router.post('/decryption/decrypt', (req, res) => {
@@ -364,6 +368,40 @@ router.post('/decryption/decrypt', (req, res) => {
   }
 });
 
+router.get('/:group_id/membres', async (req, res) => {
+  try {
+    const { group_id } = req.params;
+    const groupe = await db.Groupe.findByPk(group_id, {
+      include: [{
+        model: db.User,
+        through: { attributes: [] },
+        attributes: ['id', 'username', 'email']
+      }]
+    });
+    if (!groupe) {
+      return res.status(404).json({ error: 'Groupe non trouvé' });
+    }
+    res.json(groupe.Users || []);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
+
+
+// GET nombre de messages non lus pour une conversation
+router.get('/conversations/:conversation_id/unread-count', async (req, res) => {
+  try {
+    const { conversation_id } = req.params;
+    const count = await Message.count({ 
+      where: { conversation_id, is_read: false } 
+    });
+    console.log(`📬 Messages non lus pour conversation ${conversation_id}: ${count}`);
+    res.json({ unread_count: count });
+  } catch (err) {
+    console.error('Erreur comptage non-lus:', err);
+    res.status(500).json({ error: "Erreur lors du comptage des non-lus" });
+  }
+});
 
 module.exports = router;

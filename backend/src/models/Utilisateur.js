@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/db');
+const db = require('.');
 
 const Utilisateur = sequelize.define('Utilisateur', {
   id: {
@@ -26,6 +27,10 @@ const Utilisateur = sequelize.define('Utilisateur', {
   },
   last_name: {
     type: DataTypes.STRING,
+  },
+  notifications_disabled: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
   },
 }, {
   tableName: 'users', // Utilise la table existante

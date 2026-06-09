@@ -13,6 +13,8 @@ export type Message = {
   };
   encryptedMessageData?: string;
   encryptedAESKeyData?: string;
+  ciphertext?: string;
+  iv?: string;
 };
 
 export type UnreadCount = {

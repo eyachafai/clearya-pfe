@@ -35,12 +35,22 @@ router.get('/me', async (req, res) => {
     //   console.log('🔐 Token décodé:', tokenContent);
 
     const keycloakId = tokenContent.sub;
-    const username = tokenContent.preferred_username;
-    const email = tokenContent.email;
-    const firstName = tokenContent.given_name || '';
-    const lastName = tokenContent.family_name || '';
+    const user = await Utilisateur.findOne({
+      where: { keycloak_id: keycloakId }
+    });
 
-    return res.json({ keycloakId, username, email, firstName, lastName });
+    if (!user) {
+      return res.status(404).json({ error: "Utilisateur non trouvé en DB" });
+    }
+
+    return res.json({
+      id: user.id, // ✅ CRUCIAL
+      keycloakId,
+      username: user.username,
+      email: user.email,
+      firstName: user.first_name,
+      lastName: user.last_name
+    });
 
   } catch (error) {
     console.error('❌ Erreur interne dans /me:', error);

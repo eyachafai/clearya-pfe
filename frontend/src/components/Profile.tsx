@@ -40,7 +40,7 @@ const Profile = () => {
 
     fetchUserData();
 
-  }, [darkMode, keycloak.authenticated]); // ou [] selon usage
+  }, [darkMode, keycloak.authenticated]); 
 
 
   return (

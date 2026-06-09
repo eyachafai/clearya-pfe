@@ -1,4 +1,5 @@
 require('dotenv').config({ path: '../.env' });
+const db = require('./src/models');
 const express = require('express');
 const cors = require('cors');
 const http = require("http");
@@ -20,6 +21,9 @@ const projetRoutes = require('./src/routes/projet.routes');
 const ticketRoutres = require('./src/routes/ticket.routes');
 const quotaRoutes = require('./src/routes/quota.routes');
 const notificationsRoutes = require('./src/routes/notification.routes');
+const cryptoRoutes = require('./src/routes/crypto.routes');
+
+
 
 const app = express();
 // ➤ Sessions + Keycloak   /// il faut avant le middleware
@@ -58,19 +62,16 @@ messagesRoutes.setSocketIo(io);
 io.on("connection", (socket) => {
   console.log("Un utilisateur connecté :", socket.id);
 
-  socket.on("disconnect", () => {
-    console.log("Utilisateur déconnecté :", socket.id);
-  });
-});
-
-
-io.on("connection", (socket) => {
   socket.on("joinGroupRoom", (groupId) => {
     socket.join(`room_groupe_${groupId}`);
   });
-  // Optionnel : quitter le room
+
   socket.on("leaveGroupRoom", (groupId) => {
     socket.leave(`room_groupe_${groupId}`);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Utilisateur déconnecté :", socket.id);
   });
 });
 
@@ -81,7 +82,7 @@ app.use('/uploads', (req, res, next) => {
 }, express.static(path.join(__dirname, 'uploads'))); // <-- 'uploads' doit être au même niveau que server.js
 
 // Parse incoming raw data
-app.use(bodyParser.raw({
+app.use('/api/messages/upload', bodyParser.raw({
   type: 'application/octet-stream',
   limit: '100mb'
 }));
@@ -99,6 +100,7 @@ app.use('/api/messages', (req, res, next) => {
   next();
 });
 app.use('/api/messages', messagesRoutes);
+app.use('/api/crypto', cryptoRoutes);
 app.use('/api', projetRoutes);
 app.use('/api', quotaRoutes);
 app.use('/api/notifications', notificationsRoutes);

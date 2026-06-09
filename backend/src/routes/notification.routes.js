@@ -44,6 +44,7 @@ router.post('/notifications', async (req, res) => {
         });
         if (req.app.get('io')) {
             console.log('[NOTIF] Emission socket.io de la notification:', notifWithAuthor);
+            // Émettre à TOUS les clients (pour qu'ils reçoivent et décident s'ils l'affichent)
             req.app.get('io').emit('notification', notifWithAuthor);
         } else {
             console.log('[NOTIF] Pas de socket.io trouvé sur req.app');
@@ -89,6 +90,22 @@ router.get('/by-admin/:adminId', async (req, res) => {
         });
         res.json(notifs);
     } catch (err) {
+        res.status(500).json({ error: 'Erreur serveur' });
+    }
+});
+
+// POST pour synchroniser l'état des notifications (enabled/disabled)
+router.post('/toggle-status/:userId', async (req, res) => {
+    const { disabled } = req.body;
+    try {
+        await Utilisateur.update(
+            { notifications_disabled: disabled },
+            { where: { id: req.params.userId } }
+        );
+        console.log(`[NOTIF] Notifications pour user ${req.params.userId} mises à ${disabled}`);
+        res.json({ success: true, disabled });
+    } catch (err) {
+        console.error('[NOTIF] Erreur lors de la mise à jour:', err);
         res.status(500).json({ error: 'Erreur serveur' });
     }
 });

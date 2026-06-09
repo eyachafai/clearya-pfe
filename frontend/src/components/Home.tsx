@@ -12,7 +12,9 @@ const Home = () => {
     keycloak?.login();
   };
 
+  
   const handleLogout = () => {
+    localStorage.clear();
     keycloak?.logout({ redirectUri: window.location.origin + '/' });
     // Redirection automatique déjà gérée par Keycloak
   };

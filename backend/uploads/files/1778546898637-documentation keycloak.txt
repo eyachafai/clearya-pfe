@@ -1,0 +1,3 @@
+verification du port :netstat -ano | findstr :8080
+forcer le port a arreter : taskkill /PID 5196 /F
+execution du keycloak : bin\kc.bat start-dev

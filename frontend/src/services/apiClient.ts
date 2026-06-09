@@ -7,7 +7,7 @@ import { getToken } from './authService';
 
 // Créez une instance Axios
 const apiClient = axios.create({
-    baseURL: import.meta.env.VITE_API_URL, // l'URL de base de votre API
+    baseURL: import.meta.env.VITE_API_URL, // l'URL de base de mon API
     headers: {
         'Content-Type': 'application/json',
     },

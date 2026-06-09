@@ -5,7 +5,20 @@ const Message = sequelize.define("Message", {
   id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
   conversation_id: { type: DataTypes.INTEGER, references: { model: 'conversation', key: 'id' } },
   utilisateur_id: { type: DataTypes.INTEGER, references: { model: 'users', key: 'id' } },
-  contenu: { type: DataTypes.TEXT, allowNull: false },
+  contenu: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  ciphertext: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    comment: 'Message chiffré en base64 (E2EE)'
+  },
+  iv: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    comment: 'IV en base64 pour le chiffrement E2EE'
+  },
   type: { type: DataTypes.STRING(16), defaultValue: 'text' },
   is_read: { type: DataTypes.BOOLEAN, defaultValue: false },
   date_envoi: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },

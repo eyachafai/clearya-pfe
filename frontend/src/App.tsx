@@ -16,13 +16,16 @@ import UtilisateursPage from './components/admin/UtilisateursPage';
 import MesGroupesChatPage from './components/chat/MesGroupesChatPage';
 import GestionProjet from './components/projet/gestion-projet';
 import Projet from './components/projet/projet';
-import TicketPage from './components/projet/ticket';
+import TicketPage from './components/projet/Ticket/ticket';
 import TicketPageAdmin from './components/admin/ticketPageAdmin';
 import GestionQuotas from './components/admin/quota'
 import FichiersAd from "./components/admin/fichiersAdm";
 import Notifications from "./components/admin/notifications";
 import NotificationsUser from './components/user/notifications-user';
 import NotificationsListener from "./components/NotificationsListener";
+import { AuthProvider } from "./context/AuthContext";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 
 
@@ -30,10 +33,104 @@ import NotificationsListener from "./components/NotificationsListener";
 import { useKeycloak } from "@react-keycloak/web";
 import { setToken } from "./services/authService";
 import { useEffect, useState } from 'react';
+import { ensureECDHKeyExists } from "./hooks/useECDHKey";
 
 const AppLayout = ({ children }: { children: React.ReactNode }) => {
   // Ajoute un badge "vu" si des messages non lus existent (exemple simple)
   const [hasUnread, setHasUnread] = useState(false);
+
+  useEffect(() => {
+    const syncUser = async () => {
+      if (!keycloak?.authenticated || !keycloak?.token) return;
+
+      try {
+        // 🔹 1. نجيب keycloak user
+        const res = await fetch("http://localhost:5000/api/auth/me", {
+          headers: {
+            Authorization: `Bearer ${keycloak.token}`
+          }
+        });
+
+        const data = await res.json();
+
+        // 🔹 2. نجيب user DB
+        const localRes = await fetch(
+          `http://localhost:5000/api/users/by-keycloak/${data.keycloakId}`
+        );
+
+        const localUser = await localRes.json();
+
+        // 🔥 3. نحط utilisateur_id الصحيح
+        localStorage.setItem("utilisateur_id", localUser.id);
+
+        console.log("✅ utilisateur_id synced:", localUser.id);
+
+      } catch (err) {
+        console.error("❌ sync user error:", err);
+      }
+    };
+
+    syncUser();
+  }, [keycloak?.authenticated]);
+
+
+  useEffect(() => {
+    const syncECDHKey = async () => {
+      try {
+        if (!keycloak?.authenticated) return;
+
+        const userId = localStorage.getItem("utilisateur_id");
+        if (!userId) return;
+
+        // 1️⃣ Check si clé existe déjà
+        const check = await fetch(`http://localhost:5000/api/crypto/ecdh-public-key/${userId}`);
+
+        if (check.ok) {
+          console.log("🔑 Clé déjà موجودة");
+          return;
+        }
+
+        // 2️⃣ Générer clé ECDH
+        const keyPair = await window.crypto.subtle.generateKey(
+          {
+            name: "ECDH",
+            namedCurve: "P-256",
+          },
+          true,
+          ["deriveKey"]
+        );
+
+        const publicKey = await window.crypto.subtle.exportKey("raw", keyPair.publicKey);
+        const publicKeyBase64 = btoa(String.fromCharCode(...new Uint8Array(publicKey)));
+
+        // 3️⃣ Envoyer au backend
+        await fetch("http://localhost:5000/api/crypto/ecdh-public-key", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            user_id: Number(userId),
+            public_key: publicKeyBase64
+          })
+        });
+
+        console.log("✅ Clé ECDH créée automatiquement");
+
+      } catch (err) {
+        console.error("❌ Erreur création clé ECDH:", err);
+      }
+    };
+
+    const runECDH = async () => {
+      const userId = localStorage.getItem("utilisateur_id");
+      if (!userId) return;
+
+      await ensureECDHKeyExists(Number(userId));
+    };
+
+    runECDH();
+  }, [keycloak?.authenticated]);
 
 
   useEffect(() => {
@@ -146,35 +243,39 @@ const App = () => {
 
   return (
     <>
+      <ToastContainer position="top-right" autoClose={3000} />
+
       <NotificationsListener />
       <Router> {/* Utilisation du Router pour encapsuler toutes les routes */}
-        <AppLayout>
-          <Routes>
-            {/* Définition des routes */}
-            <Route path="/" element={<Home />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/edit-profile" element={<EditProfile />} />
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/principal" element={<PrincipalPage />} />
-            <Route path="/journal-connexion" element={<JournalConnexionPage />} />
-            <Route path="/groupes" element={<GroupesPage />} />
-            <Route path="/add-group" element={<AjouterGroupe />} />
-            <Route path="/edit-group/" element={<ModifierGroupe />} />
-            <Route path="/chat" element={<ChatPage />} />
-            <Route path="/gestion-utilisateurs" element={<GestionUtilisateursPage />} />
-            <Route path="/utilisateurs" element={<UtilisateursPage />} />
-            <Route path="/mes-groupes-chat" element={<MesGroupesChatPage />} />
-            <Route path="/gestion-projet" element={<GestionProjet />} />
-            <Route path="/projet/:id" element={<Projet />} />
-            <Route path="/tickets" element={<TicketPageWrapper />} />
-            <Route path="/admintickets" element={<TicketPageAdmin />} />
-            <Route path="/quotas" element={<GestionQuotas/>} />
-            <Route path="/fichiersAd" element={<FichiersAd/>} />
-            <Route path="/notifications" element={<Notifications/>} />
-            <Route path="/notifications-user" element={<NotificationsUser/>} />
+        <AuthProvider>
+          <AppLayout>
+            <Routes>
+              {/* Définition des routes */}
+              <Route path="/" element={<Home />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/edit-profile" element={<EditProfile />} />
+              <Route path="/admin" element={<AdminPage />} />
+              <Route path="/principal" element={<PrincipalPage />} />
+              <Route path="/journal-connexion" element={<JournalConnexionPage />} />
+              <Route path="/groupes" element={<GroupesPage />} />
+              <Route path="/add-group" element={<AjouterGroupe />} />
+              <Route path="/edit-group/" element={<ModifierGroupe />} />
+              <Route path="/chat" element={<ChatPage />} />
+              <Route path="/gestion-utilisateurs" element={<GestionUtilisateursPage />} />
+              <Route path="/utilisateurs" element={<UtilisateursPage />} />
+              <Route path="/mes-groupes-chat" element={<MesGroupesChatPage />} />
+              <Route path="/gestion-projet" element={<GestionProjet />} />
+              <Route path="/projet/:id" element={<Projet />} />
+              <Route path="/tickets" element={<TicketPageWrapper />} />
+              <Route path="/admintickets" element={<TicketPageAdmin />} />
+              <Route path="/quotas" element={<GestionQuotas />} />
+              <Route path="/fichiersAd" element={<FichiersAd />} />
+              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/notifications-user" element={<NotificationsUser />} />
 
-          </Routes>
-        </AppLayout>
+            </Routes>
+          </AppLayout>
+        </AuthProvider>
       </Router>
     </>
   );

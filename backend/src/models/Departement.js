@@ -23,7 +23,7 @@ const Departement = sequelize.define("Departement", {
     type: DataTypes.STRING,
   },
 }, {
-  tableName: 'departement', // <-- correspond à ta table PostgreSQL
+  tableName: 'departement', 
   timestamps: false          // si pas besoin de createdAt / updatedAt
 });
 

@@ -21,42 +21,60 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 
+
 // UPLOAD FILE (multer + DB)
 router.post('/files', upload.single('file'), async (req, res) => {
-  console.log('[BACK] File reçu par multer:', req.file);
-
-  if (!req.file) {
-    return res.status(400).json({ error: 'Aucun fichier envoyé' });
-  }
-
-  const userId = req.body.user_id || req.headers['x-user-id'];
-  if (!userId) {
-    return res.status(400).json({ error: "user_id requis pour quota" });
-  }
-
   try {
+    if (!req.file) return res.status(400).json({ error: 'Aucun fichier envoyé' });
+
+    const userId = req.body.user_id || req.headers['x-user-id'] || req.query.user_id;
+    if (!userId) return res.status(400).json({ error: "user_id requis" });
+
+    const fileSizeMb = req.file.size / (1024 * 1024);
+
+    let quota = await Quota.findOne({ where: { user_id: userId } });
+
+    if (!quota) {
+      quota = await Quota.create({
+        user_id: userId,
+        quota_mb: 1000,
+        used_mb: 0
+      });
+    }
+
+    if (quota.used_mb + fileSizeMb > quota.quota_mb) {
+      return res.status(403).json({ error: "Quota dépassé" });
+    }
+
     const file = await Files.create({
       file_name: req.file.originalname,
       file_type: req.file.mimetype,
       file_url: `/uploads/files/${req.file.filename}`,
-      user_id: userId // Ajout du propriétaire du fichier
+      user_id: userId
     });
 
-    // Calcul taille fichier en Mo
-    const fileSizeMb = req.file.size ? req.file.size / (1024 * 1024) : 0;
-    // Met à jour le quota utilisé
-    const quota = await Quota.findOne({ where: { user_id: userId } });
-    if (quota) {
-      quota.used_mb = (quota.used_mb || 0) + fileSizeMb;
-      await quota.save();
-    }
+    quota.used_mb = Number(quota.used_mb) + Number(fileSizeMb);
+    console.log("Avant :", quota.used_mb);
+    console.log("Ajout :", fileSizeMb);
 
-    res.status(201).json(file);
+    quota.used_mb = Number(quota.used_mb) + Number(fileSizeMb);
+
+    console.log("Après :", quota.used_mb);
+
+    await quota.save();
+
+    await quota.reload();
+    console.log("DB après save :", quota.used_mb);
+
+
+    return res.status(201).json(file);
+
   } catch (err) {
-    console.error('[BACK] Erreur DB:', err);
-    res.status(500).json({ error: "Erreur lors de l'enregistrement du fichier" });
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
+
 
 // GET all files
 router.get('/files', async (req, res) => {
@@ -96,7 +114,7 @@ router.delete('/files/:id', async (req, res) => {
     try {
       const stats = fs.statSync(filePath);
       totalMb += stats.size / (1024 * 1024);
-    } catch (e) {}
+    } catch (e) { }
   }
   const quota = await Quota.findOne({ where: { user_id: userId } });
   if (quota) {
@@ -142,14 +160,54 @@ router.post('/quota/sync', async (req, res) => {
   }
 });
 
+// PUT /api/:userId - Mettre à jour le quota
+router.put('/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const { quota_mb } = req.body;
+
+  if (!quota_mb || quota_mb < 1) {
+    return res.status(400).json({ error: 'quota_mb invalide' });
+  }
+
+  try {
+    let quota = await Quota.findOne({ where: { user_id: userId } });
+
+    if (!quota) {
+      quota = await Quota.create({
+        user_id: userId,
+        quota_mb,
+        used_mb: 0
+      });
+    } else {
+      quota.quota_mb = quota_mb;
+    }
+
+    await quota.save();
+
+    console.log(`✅ Quota mis à jour pour user ${userId}: ${quota_mb} Mo`);
+    res.json({ message: 'Quota mis à jour', quota });
+
+  } catch (err) {
+    console.error('Erreur mise à jour quota:', err);
+    res.status(500).json({ error: "Erreur lors de la mise à jour du quota" });
+  }
+});
 // GET /api/:userId (doit être à la fin)
 router.get('/:userId', async (req, res) => {
   const { userId } = req.params;
-  const quota = await Quota.findOne({ where: { user_id: userId } });
-  if (!quota) return res.status(404).json({ error: 'Quota non trouvé' });
+
+  let quota = await Quota.findOne({ where: { user_id: userId } });
+
+  if (!quota) {
+    console.log("⚠️ quota non trouvée → création automatique");
+
+    quota = await Quota.create({
+      user_id: userId,
+      quota_mb: 100,
+      used_mb: 0
+    });
+  }
+
   res.json(quota);
 });
-
-
-
 module.exports = router;

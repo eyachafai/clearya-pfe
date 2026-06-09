@@ -10,6 +10,7 @@ import autoTable from 'jspdf-autotable';
 // @ts-ignore
 import * as XLSX from 'xlsx';
 import './rapport-table.css';
+import { toast } from "react-toastify";
 
 interface Rapport {
   id: number;
@@ -160,12 +161,13 @@ const Projet = () => {
       setTacheTitre("");
       setTacheDesc("");
       setTacheMembre("");
+      toast.success("Tâche créée avec succès 🎉");
       // Refresh
       const tachesRes = await fetch(`/api/projet/${projet.id}/taches`);
       setTaches(tachesRes.ok ? await tachesRes.json() : []);
     } else {
       const err = await res.text();
-      alert("Erreur lors de la création de la tâche: " + err);
+      toast.error("Erreur lors de la création de la tâche: " + err);
       console.error('Erreur création tâche:', err);
     }
   };
@@ -191,10 +193,10 @@ const Projet = () => {
         setTaches(prev => prev.map(x => x.id === tacheId ? updated : x));
       } else {
         const err = await r.json().catch(() => ({}));
-        alert(err?.error || "Erreur changement état");
+        toast.error(err?.error || "Erreur changement état");
       }
     } catch (err) {
-      alert("Erreur lors du changement d'état");
+      toast.error("Erreur lors du changement d'état");
     }
   };
 
@@ -391,6 +393,7 @@ const Projet = () => {
     });
     setShowExportModal(false);
     setExportLoading(false);
+    toast.success("Rapport exporté avec succès 🎉");
     // Recharge la liste
     fetch(`http://localhost:5000/api/rapports?projet_id=${projet.id}`)
       .then(res => res.json())

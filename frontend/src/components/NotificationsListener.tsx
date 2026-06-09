@@ -1,30 +1,62 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { socket } from "../socket";
+
 
 const NotificationsListener = () => {
     const [toast, setToast] = useState<any | null>(null);
     const [disabled, setDisabled] = useState(() => localStorage.getItem('notifications_disabled') === 'true');
+    const disabledRef = useRef(disabled);
 
+    // Écouter les changements de localStorage depuis TOUS les onglets/composants
     useEffect(() => {
-        const onStorage = () => {
-            setDisabled(localStorage.getItem('notifications_disabled') === 'true');
+        const handleStorageChange = () => {
+            const newDisabled = localStorage.getItem('notifications_disabled') === 'true';
+            setDisabled(newDisabled);
+            disabledRef.current = newDisabled;
+            console.log('[FRONT] Storage change detected, disabled:', newDisabled);
         };
-        window.addEventListener('storage', onStorage);
-        return () => window.removeEventListener('storage', onStorage);
+        
+        window.addEventListener('storage', handleStorageChange);
+        return () => window.removeEventListener('storage', handleStorageChange);
     }, []);
 
+    // Update disabledRef quand disabled change (local state)
     useEffect(() => {
-        if (disabled) return;
-        socket.on("notification", notif => {
-            console.log("[FRONT] Notification reçue :", notif); // Log détaillé
-            setToast(notif);
-            setTimeout(() => setToast(null), 5000);
-        });
+        disabledRef.current = disabled;
+        console.log('[FRONT] Local disabled state changed to:', disabled);
+    }, [disabled]);
+
+    // Listen for notifications
+    useEffect(() => {
+        // Remove any existing listeners first
+        socket.off("notification");
+        
+socket.on("notification", notif => {
+    console.log("[FRONT] Notification reçue, disabled:", disabledRef.current);
+
+    if (!disabledRef.current) {
+
+        setToast(notif);
+
+        if (
+            'Notification' in window &&
+            Notification.permission === 'granted'
+        ) {
+            new Notification(notif.titre, {
+                body: notif.message,
+                icon: '/clearya-logo.svg'
+            });
+        }
+
+        setTimeout(() => setToast(null), 5000);
+    } else {
+        console.log('[FRONT] Notification bloquée');
+    }
+});        
         return () => {
             socket.off("notification");
-            console.log("[FRONT] Écoute des notifications désactivée");
         };
-    }, [disabled]);
+    }, []);
 
     useEffect(() => {
         // Identification du socket auprès du serveur
